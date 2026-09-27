@@ -1,0 +1,37 @@
+# Fly
+
+A small, calm browser game about flying: third person, a winged creature, open sky and the world below.
+
+Currently at **milestone 1, the feel prototype**: a placeholder creature over an endless test plane with the
+final flight model, follow camera and a live tuning panel. See [`CLAUDE.md`](CLAUDE.md) for the roadmap and
+[`docs/design-starting-point.md`](docs/design-starting-point.md) for the design notes.
+
+## Run
+
+```sh
+npm install
+npm run dev
+```
+
+## Controls
+
+| Action | Keyboard | Gamepad |
+| --- | --- | --- |
+| Pitch (dive / climb) | W / S or ↑ / ↓ | left stick Y |
+| Bank (turn) | A / D or ← / → | left stick X |
+| Flap | Space (hold to keep flapping) | A or RT |
+| Reset | R | |
+| Show / hide tuning panel | G | |
+
+W dives and S climbs, like a flight stick. Flip it with `input → invertPitch` in the panel.
+
+## Tuning
+
+Every flight and camera constant is a slider in the panel (top right). Changes save automatically in your
+browser. When something feels right, use **Save / load → Export JSON** and replace `src/tuning-defaults.json`
+with the downloaded file to make it the new default for everyone.
+
+## Deploy
+
+Pushes to `main` build and deploy to GitHub Pages via `.github/workflows/deploy.yml`. One-time setup:
+repository **Settings → Pages → Source: GitHub Actions**.

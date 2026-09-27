@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fly</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #9fb8c8; }
+      canvas { display: block; }
+      #help {
+        position: fixed; left: 12px; bottom: 12px;
+        font: 12px/1.5 system-ui, sans-serif; color: #1d2b33;
+        background: rgba(255, 255, 255, 0.55); padding: 8px 10px; border-radius: 6px;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="help">
+      W/S or ↑/↓ pitch · A/D or ←/→ bank · Space flap · R reset · G toggle tuning panel<br />
+      Gamepad: left stick fly · A / RT flap
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

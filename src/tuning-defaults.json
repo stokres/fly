@@ -1,0 +1,57 @@
+{
+  "flight": {
+    "startSpeed": 20,
+    "stallSpeed": 11,
+    "maxSpeed": 75,
+    "gravity": 9.8,
+    "drag": 0.0021,
+    "baseSink": 0.3,
+    "stallSink": 6,
+    "pitchRateDeg": 80,
+    "pitchResponse": 6,
+    "pitchAutoLevel": 0.6,
+    "glidePitchDeg": -4,
+    "maxPitchDeg": 70,
+    "stallNoseDrop": 1.2,
+    "maxBankDeg": 60,
+    "bankResponse": 3,
+    "turnRate": 0.9,
+    "bankPitchDrop": 0.3,
+    "flapThrust": 5,
+    "flapLift": 3,
+    "flapLiftDecay": 1.8,
+    "flapCooldown": 0.45,
+    "flapCost": 0.18,
+    "energyRegen": 0.08,
+    "groundClearance": 1.5
+  },
+  "camera": {
+    "distance": 9,
+    "height": 2.2,
+    "distancePerSpeed": 0.05,
+    "lateralHz": 1.6,
+    "lateralDamping": 0.9,
+    "verticalHz": 1.2,
+    "verticalDamping": 1,
+    "longitudinalHz": 0.8,
+    "longitudinalDamping": 0.85,
+    "lookAhead": 0.35,
+    "lookHeight": 1,
+    "fovMin": 60,
+    "fovMax": 85,
+    "fovSpeedMin": 18,
+    "fovSpeedMax": 60,
+    "fovResponse": 2.5,
+    "rollFactor": 0.4,
+    "rollResponse": 4
+  },
+  "world": {
+    "seed": 1337,
+    "fogDensity": 0.0012,
+    "pillarsPerTile": 120
+  },
+  "input": {
+    "invertPitch": false,
+    "gamepadDeadzone": 0.15
+  }
+}
