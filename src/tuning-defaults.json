@@ -16,7 +16,7 @@
     "maxBankDeg": 60,
     "bankResponse": 3,
     "turnRate": 0.9,
-    "bankPitchDrop": 0.3,
+    "bankPitchDrop": 0.05,
     "flapThrust": 5,
     "flapLift": 3,
     "flapLiftDecay": 1.8,
@@ -45,10 +45,30 @@
     "rollFactor": 0.4,
     "rollResponse": 4
   },
+  "thermals": {
+    "liftScale": 1,
+    "perTile": 14,
+    "radiusMin": 50,
+    "radiusMax": 90,
+    "strengthMin": 4,
+    "strengthMax": 7,
+    "topMin": 280,
+    "topMax": 450,
+    "motesPerThermal": 260,
+    "moteSize": 3,
+    "birdsPerThermal": 4,
+    "birdSize": 3,
+    "columnOpacity": 0.12
+  },
+  "landmarks": {
+    "count": 6,
+    "minSpacing": 1400,
+    "fogScale": 0.45
+  },
   "world": {
     "seed": 1337,
     "fogDensity": 0.0012,
-    "pillarsPerTile": 120
+    "pillarsPerTile": 70
   },
   "input": {
     "invertPitch": false,

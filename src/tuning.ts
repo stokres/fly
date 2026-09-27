@@ -1,5 +1,6 @@
 // Every feel constant lives here. Defaults come from tuning-defaults.json; live edits
 // are persisted to localStorage and can be exported back to JSON to become the new defaults.
+// Only values that differ from the defaults are stored, so new defaults still reach players.
 import GUI from 'lil-gui';
 import defaults from './tuning-defaults.json';
 
@@ -7,7 +8,7 @@ export type Tuning = typeof defaults;
 type Group = keyof Tuning;
 type Range = [min: number, max: number, step: number];
 
-const STORAGE_KEY = 'fly.tuning.v1';
+const STORAGE_KEY = 'fly.tuning.v2';
 
 // Slider ranges. Keys missing here fall back to lil-gui's default controller (e.g. booleans).
 const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
@@ -57,6 +58,26 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     rollFactor: [0, 1, 0.01],
     rollResponse: [0.1, 15, 0.1],
   },
+  thermals: {
+    liftScale: [0, 3, 0.01],
+    perTile: [0, 60, 1],
+    radiusMin: [10, 200, 1],
+    radiusMax: [10, 300, 1],
+    strengthMin: [0, 15, 0.1],
+    strengthMax: [0, 20, 0.1],
+    topMin: [50, 1000, 5],
+    topMax: [50, 1500, 5],
+    motesPerThermal: [0, 500, 1],
+    moteSize: [0.2, 8, 0.1],
+    birdsPerThermal: [0, 12, 1],
+    birdSize: [0.5, 8, 0.1],
+    columnOpacity: [0, 0.5, 0.005],
+  },
+  landmarks: {
+    count: [0, 16, 1],
+    minSpacing: [200, 2500, 10],
+    fogScale: [0, 1, 0.01],
+  },
   world: {
     seed: [1, 99999, 1],
     fogDensity: [0, 0.01, 0.0001],
@@ -101,8 +122,16 @@ function loadStored(): unknown {
 }
 
 function saveStored(tuning: Tuning): void {
+  const changed: Record<string, Record<string, unknown>> = {};
+  for (const group of Object.keys(tuning) as Group[]) {
+    const now = tuning[group] as Record<string, unknown>;
+    const base = defaults[group] as Record<string, unknown>;
+    for (const key of Object.keys(now)) {
+      if (now[key] !== base[key]) (changed[group] ??= {})[key] = now[key];
+    }
+  }
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tuning));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(changed));
   } catch {
     // Storage unavailable (private mode etc.): tuning still works for this session.
   }

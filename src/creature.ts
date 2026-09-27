@@ -2,6 +2,7 @@
 // Will be replaced by the real model with procedural wings (see CLAUDE.md roadmap).
 import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from 'three';
 import type { FlightPose } from './flight';
+import { PALETTE } from './palette';
 
 export class Creature {
   readonly object = new Group();
@@ -13,13 +14,13 @@ export class Creature {
   constructor() {
     const body = new Mesh(
       new BoxGeometry(0.5, 0.35, 1.4),
-      new MeshStandardMaterial({ color: 0xf2e8d5, flatShading: true }),
+      new MeshStandardMaterial({ color: PALETTE.bone, flatShading: true }),
     );
     this.object.add(body);
 
     const wingGeo = new BoxGeometry(1.6, 0.06, 0.7);
     wingGeo.translate(0.8, 0, 0); // hinge at the body
-    const wingMat = new MeshStandardMaterial({ color: 0xe0795b, flatShading: true });
+    const wingMat = new MeshStandardMaterial({ color: PALETTE.ember, flatShading: true });
     this.rightWing = new Group();
     this.rightWing.add(new Mesh(wingGeo, wingMat));
     this.rightWing.position.set(0.25, 0.05, 0.05);

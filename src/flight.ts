@@ -30,6 +30,8 @@ export class Flight {
   climb = 0;
   /** Current sink rate (m/s, positive = down). */
   sink = 0;
+  /** Rising air at the current position (m/s), from thermals. Moves the creature, not its airspeed. */
+  updraft = 0;
   /** 0..1 */
   energy = 1;
   /** Increments on each flap; visuals can use it to trigger a wingbeat. */
@@ -53,6 +55,7 @@ export class Flight {
     this.bank = 0;
     this.speed = t.startSpeed;
     this.climb = 0;
+    this.updraft = 0;
     this.energy = 1;
     this.pitchRate = 0;
     this.flapTimer = 0;
@@ -66,13 +69,15 @@ export class Flight {
 
   velocity(out = new Vector3()): Vector3 {
     this.forward(out).multiplyScalar(this.speed);
-    out.y += this.climb - this.sink;
+    out.y += this.climb + this.updraft - this.sink;
     return out;
   }
 
-  step(dt: number, input: FlightInput): void {
+  /** Advances one fixed step. `updraft` is the rising air (m/s) at the current position. */
+  step(dt: number, input: FlightInput, updraft = 0): void {
     const t = tuning.flight;
     this.storePrevious();
+    this.updraft = updraft;
 
     const stallRatio = Math.min(1, this.speed / Math.max(t.stallSpeed, 0.01));
     const stalled = 1 - stallRatio * stallRatio; // 0 above stall speed, ->1 as speed ->0

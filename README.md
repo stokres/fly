@@ -2,8 +2,8 @@
 
 A small, calm browser game about flying: third person, a winged creature, open sky and the world below.
 
-Currently at **milestone 1, the feel prototype**: a placeholder creature over an endless test plane with the
-final flight model, follow camera and a live tuning panel. See [`CLAUDE.md`](CLAUDE.md) for the roadmap and
+Currently at **milestone 2, soft pull**: a placeholder creature over an endless test plane, with the flight
+model, follow camera, thermals to climb in, landmarks on the horizon and a live tuning panel. See [`CLAUDE.md`](CLAUDE.md) for the roadmap and
 [`docs/design-starting-point.md`](docs/design-starting-point.md) for the design notes.
 
 ## Run
@@ -24,6 +24,9 @@ npm run dev
 | Show / hide tuning panel | G | |
 
 W dives and S climbs, like a flight stick. Flip it with `input → invertPitch` in the panel.
+
+**Thermals:** faint shimmering columns with motes drifting up and birds circling. Fly in and hold a turn to
+climb without flapping. Large landmarks on the horizon each have one beside them.
 
 ## Tuning
 

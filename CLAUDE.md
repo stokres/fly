@@ -26,7 +26,12 @@ Full design rationale: `docs/design-starting-point.md` (a starting point, not a 
 | `src/camera.ts` | follow camera: per-axis springs, look-ahead, dynamic FOV, partial roll |
 | `src/input.ts` | keyboard + gamepad → `FlightInput` |
 | `src/creature.ts` | creature visuals (currently a placeholder box with wings) |
-| `src/world.ts` | scene, lights, fog, ground, seeded props |
+| `src/world.ts` | scene, lights, fog, ground, seeded test pillars |
+| `src/landmarks.ts` | large horizon landmarks (arch, spire, ring, stack) with reduced fog |
+| `src/thermals.ts` | rising air columns: lift query, motes, circling birds, faint column |
+| `src/tiling.ts` | repeating-tile world helpers (`WORLD_TILE`, `wrapDelta`, 3x3 `TileGrid`) |
+| `src/random.ts` | seeded PRNG (`mulberry32`, `seeded(seed, salt)`) |
+| `src/palette.ts` | the limited color palette; all colors come from here |
 | `src/tuning.ts` | tuning panel, slider ranges, persistence, JSON export/import |
 | `src/tuning-defaults.json` | default values of every tunable constant |
 
@@ -42,8 +47,11 @@ new section in an existing one.
   anything the player can feel. New tunables are read from the `tuning` object every frame (live edits must work).
 - Frame-rate independent smoothing: `x += (target - x) * (1 - Math.exp(-rate * dt))`.
 - No per-frame allocations in hot paths: reuse scratch `Vector3`s.
-- Anything procedural takes a seed and uses `mulberry32` from `world.ts` (never `Math.random()`), so a good
-  world can be reproduced.
+- Anything procedural uses `seeded(tuning.world.seed, '<system>')` from `random.ts` (never `Math.random()`),
+  so a good world can be reproduced and one system's settings don't reshuffle another's.
+- Colors come from `palette.ts`. Add a color there only with a reason.
+- Systems don't import each other's internals; `main.ts` wires them (e.g. it passes thermal lift into
+  `flight.step`).
 - Code comments explain *why*, briefly.
 
 ## Workflow
@@ -58,9 +66,10 @@ new section in an existing one.
 
 ## Roadmap (vertical slices)
 
-1. **Feel prototype**: placeholder creature, endless grid plane with pillars, final flight model + camera,
-   tuning panel. ← *current*. Exit criterion: flying the placeholder already feels good.
-2. Thermals (rising columns, marked by particles/birds) and landmarks for soft pull.
+1. ~~Feel prototype~~: placeholder creature, endless grid plane with pillars, flight model + camera,
+   tuning panel. Done: feel approved as good enough, to be refined later.
+2. **Soft pull** ← *current*: thermals (lift + motes, birds, faint column) and horizon landmarks with a
+   thermal beside each. Flying through things has no collision yet (decide with terrain).
 3. Terrain: curated, finite world (archipelago / valley), chunked with LOD.
 4. Creature: real model, rim light, procedural wings driven by speed and input.
 5. Atmosphere: gradient sky shader + sun, distance/sun-tinted fog, cloud layers, time of day.

@@ -4,6 +4,8 @@ import { FollowCamera } from './camera';
 import { Creature } from './creature';
 import { Flight, type FlightPose } from './flight';
 import { Input } from './input';
+import { Landmarks } from './landmarks';
+import { Thermals } from './thermals';
 import { createTuningPanel, onTuningChange, tuning } from './tuning';
 import { World } from './world';
 
@@ -21,15 +23,26 @@ const flight = new Flight();
 const creature = new Creature();
 const follow = new FollowCamera(window.innerWidth / window.innerHeight);
 const input = new Input();
-world.scene.add(creature.object);
+const landmarks = new Landmarks();
+const thermals = new Thermals();
+thermals.rebuild(landmarks.list);
+world.scene.add(creature.object, landmarks.group, thermals.group);
 
-const readouts = { speed: 0, altitude: 0, sink: 0, energy: 0, fps: 0, cpuMs: 0 };
+const readouts = { speed: 0, altitude: 0, lift: 0, sink: 0, energy: 0, fps: 0, cpuMs: 0 };
 const gui = createTuningPanel(readouts);
 let guiVisible = true;
 
+// Values read every frame need nothing here; these need a rebuild or a push into a material.
 onTuningChange((group, key) => {
-  if (group === 'world' && (key === 'seed' || key === 'pillarsPerTile')) world.buildPillars();
+  const reseed = group === 'world' && key === 'seed';
+  if (reseed || (group === 'world' && key === 'pillarsPerTile')) world.buildPillars();
   if (group === 'world' && key === 'fogDensity') world.setFogDensity(tuning.world.fogDensity);
+  if (group === 'landmarks' && key === 'fogScale') landmarks.setFogScale(tuning.landmarks.fogScale);
+  const landmarkLayout = group === 'landmarks' && key !== 'fogScale';
+  if (reseed || landmarkLayout) landmarks.rebuild();
+  const live = ['liftScale', 'moteSize', 'birdSize', 'columnOpacity'];
+  const thermalLayout = group === 'thermals' && !live.includes(key);
+  if (reseed || landmarkLayout || thermalLayout) thermals.rebuild(landmarks.list);
 });
 
 const pose: FlightPose = { position: new Vector3(), yaw: 0, pitch: 0, bank: 0 };
@@ -66,7 +79,7 @@ function frame(now: number): void {
   const intent = input.read();
   accumulator += dt;
   while (accumulator >= FIXED_DT) {
-    flight.step(FIXED_DT, intent);
+    flight.step(FIXED_DT, intent, thermals.liftAt(flight.position));
     accumulator -= FIXED_DT;
   }
   flight.interpolate(accumulator / FIXED_DT, pose);
@@ -75,6 +88,8 @@ function frame(now: number): void {
   creature.update(dt, pose, flight.flapCount);
   follow.update(dt, pose, velocity, flight.speed);
   world.update(pose.position);
+  landmarks.update(pose.position);
+  thermals.update(dt, pose.position);
   renderer.render(world.scene, follow.camera);
   input.endFrame();
 
@@ -87,6 +102,7 @@ function frame(now: number): void {
   }
   readouts.speed = round(flight.speed, 1);
   readouts.altitude = round(flight.position.y, 1);
+  readouts.lift = round(flight.updraft, 2);
   readouts.sink = round(flight.sink - flight.climb, 2);
   readouts.energy = round(flight.energy, 2);
   readouts.cpuMs = round(performance.now() - frameStart, 2);
