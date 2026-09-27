@@ -9,6 +9,9 @@ import { tuning } from './tuning';
 
 const UP = new Vector3(0, 1, 0);
 
+/** Height of the ground (terrain or sea) at a point, so the camera never goes under it. */
+export type GroundQuery = (x: number, z: number) => number;
+
 export class FollowCamera {
   readonly camera: PerspectiveCamera;
   private readonly vel = new Vector3();
@@ -26,7 +29,7 @@ export class FollowCamera {
 
   constructor(aspect: number) {
     this.fov = tuning.camera.fovMin;
-    this.camera = new PerspectiveCamera(this.fov, aspect, 0.1, 8000);
+    this.camera = new PerspectiveCamera(this.fov, aspect, 0.5, 12000);
   }
 
   /** Jump straight to the resting position behind the creature (no spring motion). */
@@ -39,7 +42,7 @@ export class FollowCamera {
     this.apply(pose, velocity);
   }
 
-  update(dt: number, pose: FlightPose, velocity: Vector3, speed: number): void {
+  update(dt: number, pose: FlightPose, velocity: Vector3, speed: number, groundAt: GroundQuery): void {
     const c = tuning.camera;
     this.computeDesired(pose, speed);
 
@@ -55,6 +58,14 @@ export class FollowCamera {
       this.addAxis(this.fwd, c.longitudinalHz, c.longitudinalDamping);
       this.vel.addScaledVector(this.accel, h);
       this.camera.position.addScaledVector(this.vel, h);
+    }
+
+    // Stay above the ground: ride up over slopes instead of clipping into them.
+    const cam = this.camera.position;
+    const floor = groundAt(cam.x, cam.z) + c.groundClearance;
+    if (cam.y < floor) {
+      cam.y = floor;
+      this.vel.y = Math.max(0, this.vel.y);
     }
 
     this.roll = MathUtils.lerp(this.roll, pose.bank * c.rollFactor, 1 - Math.exp(-c.rollResponse * dt));

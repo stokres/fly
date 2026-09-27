@@ -8,9 +8,21 @@
 // pitch > 0 is nose up, bank > 0 is right wing down.
 import { Vector3 } from 'three';
 import type { FlightInput } from './input';
+import { SPAWN } from './map';
 import { tuning } from './tuning';
 
 const DEG = Math.PI / 180;
+
+/** What the world tells the flight model at the creature's position. */
+export interface FlightEnvironment {
+  /** Rising air, m/s. Moves the creature, not its airspeed. */
+  updraft: number;
+  /** Height of whatever is below: terrain or the sea surface. */
+  ground: number;
+  /** Ground slope (dHeight/dx, dHeight/dz) below the creature. */
+  groundSlopeX: number;
+  groundSlopeZ: number;
+}
 
 export interface FlightPose {
   position: Vector3;
@@ -47,10 +59,10 @@ export class Flight {
     this.reset();
   }
 
-  reset(): void {
+  reset(start: { x: number; y: number; z: number; yaw: number } = SPAWN): void {
     const t = tuning.flight;
-    this.position.set(0, 120, 0);
-    this.yaw = 0;
+    this.position.set(start.x, start.y, start.z);
+    this.yaw = start.yaw;
     this.pitch = t.glidePitchDeg * DEG;
     this.bank = 0;
     this.speed = t.startSpeed;
@@ -73,11 +85,10 @@ export class Flight {
     return out;
   }
 
-  /** Advances one fixed step. `updraft` is the rising air (m/s) at the current position. */
-  step(dt: number, input: FlightInput, updraft = 0): void {
+  step(dt: number, input: FlightInput, env: FlightEnvironment): void {
     const t = tuning.flight;
     this.storePrevious();
-    this.updraft = updraft;
+    this.updraft = env.updraft;
 
     const stallRatio = Math.min(1, this.speed / Math.max(t.stallSpeed, 0.01));
     const stalled = 1 - stallRatio * stallRatio; // 0 above stall speed, ->1 as speed ->0
@@ -127,11 +138,37 @@ export class Flight {
     this.position.addScaledVector(this.velocity(scratch), dt);
 
     // Ground: no crashes, just skim and nose up.
-    if (this.position.y < t.groundClearance) {
-      this.position.y = t.groundClearance;
+    const floor = env.ground + t.groundClearance;
+    if (this.position.y < floor) {
+      // Being pushed up a slope costs speed like climbing does, so the ground is never free lift.
+      // Only height actually gained this step counts; sinking into the ground and being pushed
+      // back out is free.
+      const rise = Math.max(0, floor - this.previous.position.y);
+      this.speed = Math.sqrt(Math.max(0, this.speed * this.speed - 2 * t.gravity * rise));
+      this.position.y = floor;
       if (this.pitch < 0) this.pitch *= Math.exp(-4 * dt);
       this.climb = Math.max(0, this.climb);
+      this.slideOffSlope(dt, env);
     }
+  }
+
+  /**
+   * Stalled against a slope, the creature can't turn (no airspeed) and flapping only pushes it
+   * into the hill. So it turns to face downhill and gravity carries it off, like a bird dropping
+   * away from a hillside. On flat ground nothing happens: flap to take off.
+   */
+  private slideOffSlope(dt: number, env: FlightEnvironment): void {
+    const t = tuning.flight;
+    const steepness = Math.hypot(env.groundSlopeX, env.groundSlopeZ);
+    if (this.speed >= t.stallSpeed || steepness < 0.05) return;
+    const downhillYaw = Math.atan2(env.groundSlopeX, env.groundSlopeZ);
+    let delta = downhillYaw - this.yaw;
+    delta = Math.atan2(Math.sin(delta), Math.cos(delta)); // shortest way round
+    const slow = 1 - this.speed / t.stallSpeed;
+    this.yaw += Math.sign(delta) * Math.min(Math.abs(delta), t.slideTurnRate * slow * dt);
+    // Accelerate along the slope, by how much the heading points downhill.
+    const downhill = -(env.groundSlopeX * -Math.sin(this.yaw) + env.groundSlopeZ * -Math.cos(this.yaw));
+    if (downhill > 0) this.speed += (t.gravity * downhill) / Math.sqrt(1 + downhill * downhill) * dt;
   }
 
   /** Pose blended between the previous and current step. */

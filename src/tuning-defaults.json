@@ -23,7 +23,8 @@
     "flapCooldown": 0.45,
     "flapCost": 0.18,
     "energyRegen": 0.08,
-    "groundClearance": 1.5
+    "groundClearance": 2,
+    "slideTurnRate": 1.5
   },
   "camera": {
     "distance": 9,
@@ -43,11 +44,11 @@
     "fovSpeedMax": 60,
     "fovResponse": 2.5,
     "rollFactor": 0.4,
-    "rollResponse": 4
+    "rollResponse": 4,
+    "groundClearance": 3
   },
   "thermals": {
     "liftScale": 1,
-    "perTile": 14,
     "radiusMin": 50,
     "radiusMax": 90,
     "strengthMin": 4,
@@ -58,17 +59,22 @@
     "moteSize": 3,
     "birdsPerThermal": 4,
     "birdSize": 3,
-    "columnOpacity": 0.12
+    "columnOpacity": 0.12,
+    "extraCount": 16
   },
   "landmarks": {
-    "count": 6,
-    "minSpacing": 1400,
-    "fogScale": 0.45
+    "fogScale": 0.5
+  },
+  "terrain": {
+    "detail": 1,
+    "fillerIslets": 14,
+    "lodDistance": 600,
+    "drawDistance": 5500
   },
   "world": {
     "seed": 1337,
-    "fogDensity": 0.0012,
-    "pillarsPerTile": 70
+    "fogDensity": 0.0005,
+    "waterOpacity": 0.78
   },
   "input": {
     "invertPitch": false,

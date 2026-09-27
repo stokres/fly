@@ -1,6 +1,7 @@
 // Thermals: invisible rising columns of air. Circle inside one to gain height without flapping.
 // They are marked without UI: a faint shimmering column, motes drifting upward in a slow spiral,
-// and birds circling inside. Every landmark has one beside it, and one waits just ahead of the spawn point.
+// and birds circling inside. Key ones are placed in map.ts; more are scattered over land (sun-heated
+// ground). None rise from open water.
 import {
   BufferAttribute,
   BufferGeometry,
@@ -19,22 +20,23 @@ import {
   Quaternion,
   Vector3,
 } from 'three';
-import type { Landmark } from './landmarks';
+import type { Heightfield } from './heightfield';
+import { THERMALS, WORLD_HALF_SIZE } from './map';
 import { PALETTE } from './palette';
 import { seeded } from './random';
-import { TileGrid, WORLD_TILE, wrapDelta } from './tiling';
 import { tuning } from './tuning';
 
 const MOTE_COLOR = new Color(PALETTE.bone);
 
 export interface Thermal {
-  /** Tile-local center. */
   x: number;
   z: number;
+  /** Ground height at the center; the column rises from here. */
+  base: number;
   radius: number;
   /** Peak updraft at the core, m/s. */
   strength: number;
-  /** Height where the lift has faded to zero. */
+  /** Altitude where the lift has faded to zero. */
   top: number;
   /** +1 or -1: which way the motes and birds circle. */
   spin: number;
@@ -45,7 +47,7 @@ export function thermalLift(th: Thermal, dist2: number, y: number): number {
   const d2 = dist2 / (th.radius * th.radius);
   if (d2 >= 1) return 0;
   const core = 1 - d2 * d2; // broad core, soft edge
-  const fade = 1 - MathUtils.smoothstep(y, th.top * 0.75, th.top);
+  const fade = 1 - MathUtils.smoothstep(y, th.base + (th.top - th.base) * 0.75, th.top);
   return th.strength * core * fade;
 }
 
@@ -108,14 +110,6 @@ function birdGeometry(): BufferGeometry {
 
 export class Thermals {
   readonly group = new Group();
-  private readonly moteTiles = new Group();
-  private readonly birdTiles = new Group();
-  private readonly columnTiles = new Group();
-  private readonly tiles = [
-    new TileGrid(this.moteTiles, WORLD_TILE),
-    new TileGrid(this.birdTiles, WORLD_TILE),
-    new TileGrid(this.columnTiles, WORLD_TILE),
-  ];
   private readonly moteMaterial = new PointsMaterial({
     map: softDotTexture(),
     size: 2.2,
@@ -137,8 +131,9 @@ export class Thermals {
   private thermals: Thermal[] = [];
   private motes: Mote[] = [];
   private birds: Bird[] = [];
-  private moteGeometry = new BufferGeometry();
-  private birdSource: InstancedMesh | null = null;
+  private motePoints: Points | null = null;
+  private birdMesh: InstancedMesh | null = null;
+  private columnMesh: InstancedMesh | null = null;
   private time = 0;
 
   // Scratch.
@@ -148,38 +143,39 @@ export class Thermals {
   private readonly p = new Vector3();
   private readonly s = new Vector3();
 
-  constructor() {
-    this.group.add(this.columnTiles, this.moteTiles, this.birdTiles);
-  }
-
-  /** Rebuilds all thermals. Landmarks each get a thermal beside them. */
-  rebuild(landmarks: readonly Landmark[]): void {
+  /** Rebuilds all thermals on the given terrain. */
+  rebuild(heightfield: Heightfield): void {
     const t = tuning.thermals;
     const rand = seeded(tuning.world.seed, 'thermals');
-    const make = (x: number, z: number): Thermal => ({
-      x,
-      z,
-      radius: MathUtils.lerp(t.radiusMin, t.radiusMax, rand()),
-      strength: MathUtils.lerp(t.strengthMin, t.strengthMax, rand()),
-      top: MathUtils.lerp(t.topMin, t.topMax, rand()),
-      spin: rand() < 0.5 ? -1 : 1,
-    });
+    const make = (x: number, z: number): Thermal => {
+      const base = Math.max(0, heightfield.surface(x, z));
+      return {
+        x,
+        z,
+        base,
+        radius: MathUtils.lerp(t.radiusMin, t.radiusMax, rand()),
+        strength: MathUtils.lerp(t.strengthMin, t.strengthMax, rand()),
+        top: base + MathUtils.lerp(t.topMin, t.topMax, rand()),
+        spin: rand() < 0.5 ? -1 : 1,
+      };
+    };
 
-    this.thermals = [];
-    // One just ahead of the spawn point (spawn faces -Z) to teach the mechanic early.
-    this.thermals.push(make(40, -380));
-    for (const l of landmarks) {
-      const a = rand() * Math.PI * 2;
-      const d = l.radius + t.radiusMax + 40;
-      this.thermals.push(make(l.x + Math.cos(a) * d, l.z + Math.sin(a) * d));
-    }
-    for (let i = 0; i < Math.round(t.perTile); i++) {
-      this.thermals.push(make((rand() - 0.5) * WORLD_TILE, (rand() - 0.5) * WORLD_TILE));
+    this.thermals = THERMALS.map((p) => make(p.x, p.z));
+    // Scatter the rest over land, away from each other.
+    const extra = Math.round(t.extraCount);
+    for (let tries = 0, added = 0; added < extra && tries < extra * 200; tries++) {
+      const x = (rand() * 2 - 1) * WORLD_HALF_SIZE;
+      const z = (rand() * 2 - 1) * WORLD_HALF_SIZE;
+      if (heightfield.surface(x, z) < 15) continue;
+      if (this.thermals.some((th) => Math.hypot(th.x - x, th.z - z) < 600)) continue;
+      this.thermals.push(make(x, z));
+      added++;
     }
 
     this.motes = [];
     this.birds = [];
     for (const th of this.thermals) {
+      const height = th.top - th.base;
       for (let i = 0; i < Math.round(t.motesPerThermal); i++) {
         this.motes.push({
           thermal: th,
@@ -194,7 +190,7 @@ export class Thermals {
           thermal: th,
           angle: rand() * Math.PI * 2,
           orbit: th.radius * (0.4 + rand() * 0.5),
-          height: th.top * (0.2 + rand() * 0.6),
+          height: th.base + height * (0.2 + rand() * 0.6),
           speed: 9 + rand() * 4,
           bob: rand() * Math.PI * 2,
         });
@@ -202,81 +198,69 @@ export class Thermals {
     }
 
     this.buildMeshes();
-    this.update(0, new Vector3(NaN, 0, NaN));
+    this.update(0);
   }
 
-  /** Updraft (m/s) at a world position. Smooth core, fading out toward the thermal's top. */
+  /** Updraft (m/s) at a world position. */
   liftAt(pos: Vector3): number {
     let lift = 0;
     for (const th of this.thermals) {
-      const dx = wrapDelta(pos.x, th.x, WORLD_TILE);
-      const dz = wrapDelta(pos.z, th.z, WORLD_TILE);
+      const dx = pos.x - th.x;
+      const dz = pos.z - th.z;
       lift += thermalLift(th, dx * dx + dz * dz, pos.y);
     }
     return lift * tuning.thermals.liftScale;
   }
 
-  update(dt: number, player: Vector3): void {
+  update(dt: number): void {
     this.time += dt;
-    if (!Number.isNaN(player.x)) this.tiles.forEach((tile) => tile.update(player));
     this.updateMotes();
     this.updateBirds();
   }
 
   private buildMeshes(): void {
-    this.moteTiles.clear();
-    this.birdTiles.clear();
-    for (const child of this.columnTiles.children) (child as InstancedMesh).dispose();
-    this.columnTiles.clear();
-    this.tiles.forEach((tile) => tile.invalidate());
-    this.moteGeometry.dispose();
-    this.birdSource?.dispose();
-
-    this.moteGeometry = new BufferGeometry();
-    this.moteGeometry.setAttribute('position', new BufferAttribute(new Float32Array(this.motes.length * 3), 3));
-    this.moteGeometry.setAttribute('color', new BufferAttribute(new Float32Array(this.motes.length * 4), 4));
-
-    const columns = new InstancedMesh(this.columnGeometry, this.columnMaterial, Math.max(this.thermals.length, 1));
-    columns.count = this.thermals.length;
-    this.thermals.forEach((th, i) => {
-      this.p.set(th.x, 0, th.z);
-      this.s.set(th.radius * 0.8, th.top, th.radius * 0.8);
-      columns.setMatrixAt(i, this.m.compose(this.p, this.q.identity(), this.s));
-    });
-    columns.computeBoundingSphere();
-
-    const count = this.birds.length;
-    this.birdSource = new InstancedMesh(this.birdGeometry, this.birdMaterial, Math.max(count, 1));
-    this.birdSource.count = count;
-    for (let i = 0; i < 9; i++) {
-      const points = new Points(this.moteGeometry, this.moteMaterial);
-      points.frustumCulled = false; // animated every frame; bounds would be stale
-      this.moteTiles.add(points);
-
-      const birds = i === 0 ? this.birdSource : new InstancedMesh(this.birdGeometry, this.birdMaterial, count);
-      birds.instanceMatrix = this.birdSource.instanceMatrix;
-      birds.count = count;
-      birds.frustumCulled = false;
-      this.birdTiles.add(birds);
-
-      const cols = i === 0 ? columns : new InstancedMesh(this.columnGeometry, this.columnMaterial, columns.count);
-      cols.instanceMatrix = columns.instanceMatrix;
-      cols.boundingSphere = columns.boundingSphere;
-      this.columnTiles.add(cols);
+    for (const obj of [this.motePoints, this.birdMesh, this.columnMesh]) {
+      if (!obj) continue;
+      this.group.remove(obj);
+      if (obj instanceof Points) obj.geometry.dispose();
+      else obj.dispose();
     }
+
+    const moteGeometry = new BufferGeometry();
+    moteGeometry.setAttribute('position', new BufferAttribute(new Float32Array(this.motes.length * 3), 3));
+    moteGeometry.setAttribute('color', new BufferAttribute(new Float32Array(this.motes.length * 4), 4));
+    this.motePoints = new Points(moteGeometry, this.moteMaterial);
+    this.motePoints.frustumCulled = false; // animated every frame; bounds would be stale
+
+    this.columnMesh = new InstancedMesh(this.columnGeometry, this.columnMaterial, Math.max(this.thermals.length, 1));
+    this.columnMesh.count = this.thermals.length;
+    this.thermals.forEach((th, i) => {
+      this.p.set(th.x, th.base, th.z);
+      this.s.set(th.radius * 0.8, th.top - th.base, th.radius * 0.8);
+      this.columnMesh!.setMatrixAt(i, this.m.compose(this.p, this.q.identity(), this.s));
+    });
+    this.columnMesh.computeBoundingSphere();
+
+    this.birdMesh = new InstancedMesh(this.birdGeometry, this.birdMaterial, Math.max(this.birds.length, 1));
+    this.birdMesh.count = this.birds.length;
+    this.birdMesh.frustumCulled = false;
+
+    this.group.add(this.columnMesh, this.motePoints, this.birdMesh);
   }
 
   private updateMotes(): void {
-    const pos = this.moteGeometry.attributes.position as BufferAttribute;
-    const col = this.moteGeometry.attributes.color as BufferAttribute;
+    if (!this.motePoints) return;
+    const pos = this.motePoints.geometry.attributes.position as BufferAttribute;
+    const col = this.motePoints.geometry.attributes.color as BufferAttribute;
     for (let i = 0; i < this.motes.length; i++) {
       const mote = this.motes[i];
       const th = mote.thermal;
+      const height = th.top - th.base;
       // Rise from the ground to the top, then loop. The column widens as it rises.
-      const h01 = (mote.phase + (this.time * mote.rise) / th.top) % 1;
+      const h01 = (mote.phase + (this.time * mote.rise) / height) % 1;
       const r = th.radius * mote.radiusFrac * (0.5 + 0.5 * h01);
       const a = mote.angle + (th.spin * this.time * 6) / Math.max(r, 5);
-      pos.setXYZ(i, th.x + Math.cos(a) * r, h01 * th.top, th.z + Math.sin(a) * r);
+      pos.setXYZ(i, th.x + Math.cos(a) * r, th.base + h01 * height, th.z + Math.sin(a) * r);
       // Fade in at the bottom and out at the top so the loop is invisible.
       const alpha = MathUtils.smoothstep(h01, 0, 0.1) * (1 - MathUtils.smoothstep(h01, 0.8, 1));
       col.setXYZW(i, MOTE_COLOR.r, MOTE_COLOR.g, MOTE_COLOR.b, alpha * 0.85);
@@ -288,7 +272,7 @@ export class Thermals {
   }
 
   private updateBirds(): void {
-    if (!this.birdSource) return;
+    if (!this.birdMesh) return;
     const scale = tuning.thermals.birdSize;
     this.s.set(scale, scale, scale);
     for (let i = 0; i < this.birds.length; i++) {
@@ -304,8 +288,8 @@ export class Thermals {
       const yaw = th.spin > 0 ? Math.PI - angle : -angle;
       const bank = 0.35 + Math.sin(this.time * 1.7 + b.bob) * 0.08;
       this.e.set(0, yaw, -th.spin * bank);
-      this.birdSource.setMatrixAt(i, this.m.compose(this.p, this.q.setFromEuler(this.e), this.s));
+      this.birdMesh.setMatrixAt(i, this.m.compose(this.p, this.q.setFromEuler(this.e), this.s));
     }
-    this.birdSource.instanceMatrix.needsUpdate = true;
+    this.birdMesh.instanceMatrix.needsUpdate = true;
   }
 }

@@ -1,36 +1,24 @@
 // Landmarks: a few large, distinctive shapes that read on the horizon and invite approach.
 // They see through fog more than everything else (fogScale), so their silhouettes pull from afar.
-// Some can be flown through (arch, ring). Each has a thermal next to it (see thermals.ts).
+// Some can be flown through (arch, ring). Placements are authored in map.ts.
 import {
   BoxGeometry,
   BufferAttribute,
   BufferGeometry,
   Color,
   CylinderGeometry,
-  Group,
   Mesh,
   MeshStandardMaterial,
   TorusGeometry,
-  Vector2,
-  type Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import type { Heightfield } from './heightfield';
+import { LANDMARKS } from './map';
 import { PALETTE, PROP_COLORS } from './palette';
 import { seeded } from './random';
-import { TileGrid, WORLD_TILE, wrapDelta } from './tiling';
 import { tuning } from './tuning';
 
 export type LandmarkKind = 'arch' | 'spire' | 'ring' | 'stack';
-const KINDS: LandmarkKind[] = ['arch', 'spire', 'ring', 'stack'];
-
-export interface Landmark {
-  kind: LandmarkKind;
-  /** Tile-local position (repeats every WORLD_TILE). */
-  x: number;
-  z: number;
-  /** Radius of the footprint, to keep thermals and other landmarks clear of it. */
-  radius: number;
-}
 
 /** Non-indexed, colored part, ready to merge. */
 function part(geo: BufferGeometry, color: number): BufferGeometry {
@@ -89,16 +77,13 @@ function build(kind: LandmarkKind, rand: () => number): { parts: BufferGeometry[
 }
 
 export class Landmarks {
-  readonly group = new Group();
-  private readonly tiles = new TileGrid(this.group, WORLD_TILE);
-  private readonly material: MeshStandardMaterial;
+  readonly mesh = new Mesh(new BufferGeometry());
   private readonly fogScale = { value: tuning.landmarks.fogScale };
-  list: Landmark[] = [];
 
-  constructor() {
-    this.material = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
+  constructor(heightfield: Heightfield) {
+    const material = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
     // Same exp² fog as everything else, with the density scaled down for landmarks only.
-    this.material.onBeforeCompile = (shader) => {
+    material.onBeforeCompile = (shader) => {
       shader.uniforms.fogScale = this.fogScale;
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', '#include <common>\nuniform float fogScale;')
@@ -111,59 +96,32 @@ export class Landmarks {
           #endif`,
         );
     };
-    this.material.customProgramCacheKey = () => 'landmark-fog';
-    this.rebuild();
+    material.customProgramCacheKey = () => 'landmark-fog';
+    this.mesh.material = material;
+    this.rebuild(heightfield);
   }
 
   setFogScale(scale: number): void {
     this.fogScale.value = scale;
   }
 
-  rebuild(): void {
-    for (const child of this.group.children) (child as Mesh).geometry.dispose();
-    this.group.clear();
-    this.tiles.invalidate();
-
-    const t = tuning.landmarks;
+  rebuild(heightfield: Heightfield): void {
     const rand = seeded(tuning.world.seed, 'landmarks');
-    const count = Math.round(t.count);
-    this.list = [];
     const geos: BufferGeometry[] = [];
-    for (let i = 0; i < count; i++) {
-      const kind = KINDS[i % KINDS.length];
-      const { parts, radius } = build(kind, rand);
-      // The first landmark stands ahead of the spawn point (spawn faces -Z), so there is
-      // something to fly toward from the first second.
-      const spot =
-        i === 0 ? new Vector2((rand() - 0.5) * 300, -1100) : this.findSpot(rand, radius, t.minSpacing);
-      const yaw = rand() * Math.PI;
-      for (const p of parts) geos.push(p.rotateY(yaw).translate(spot.x, 0, spot.y));
-      this.list.push({ kind, x: spot.x, z: spot.y, radius });
+    for (const place of LANDMARKS) {
+      const { parts, radius } = build(place.kind, rand);
+      // Sink the base to the lowest ground under the footprint so nothing floats.
+      let base = Infinity;
+      for (let a = 0; a < 8; a++) {
+        const r = a === 0 ? 0 : radius * 0.8;
+        const angle = (a / 7) * Math.PI * 2;
+        base = Math.min(base, heightfield.surface(place.x + Math.cos(angle) * r, place.z + Math.sin(angle) * r));
+      }
+      base = Math.max(base, -30) - 2;
+      for (const p of parts) geos.push(p.rotateY(place.angle).translate(place.x, base, place.z));
     }
-    if (geos.length === 0) return;
-
-    const merged = mergeGeometries(geos);
+    this.mesh.geometry.dispose();
+    this.mesh.geometry = mergeGeometries(geos);
     geos.forEach((g) => g.dispose());
-    for (let i = 0; i < 9; i++) this.group.add(new Mesh(merged, this.material));
-  }
-
-  update(player: Vector3): void {
-    this.tiles.update(player);
-  }
-
-  private findSpot(rand: () => number, radius: number, spacing: number): Vector2 {
-    const spot = new Vector2();
-    // Rejection sampling with a fallback: after enough tries, take the last candidate.
-    for (let tries = 0; tries < 200; tries++) {
-      spot.set((rand() - 0.5) * WORLD_TILE, (rand() - 0.5) * WORLD_TILE);
-      const clear = this.list.every((l) => {
-        const dx = wrapDelta(spot.x, l.x, WORLD_TILE);
-        const dz = wrapDelta(spot.y, l.z, WORLD_TILE);
-        return Math.hypot(dx, dz) > spacing + radius + l.radius;
-      });
-      // Keep the spawn area open.
-      if (clear && Math.hypot(spot.x, spot.y) > 400) break;
-    }
-    return spot;
   }
 }

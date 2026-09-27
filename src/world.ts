@@ -1,65 +1,30 @@
-// Test world: an endless grid plane plus scattered pillars for speed and altitude cues,
-// with fog and lights. Pillars repeat in small tiles around the player.
+// Scene, light, fog and the ocean. The ocean surface and the sea floor beneath it follow the
+// player, so the sea never ends; terrain.ts draws only where there is land.
 import {
-  BoxGeometry,
-  CanvasTexture,
   Color,
   DirectionalLight,
   FogExp2,
-  Group,
   HemisphereLight,
-  InstancedMesh,
-  LinearMipmapLinearFilter,
-  Matrix4,
   Mesh,
   MeshStandardMaterial,
   PlaneGeometry,
-  Quaternion,
-  RepeatWrapping,
   Scene,
-  SRGBColorSpace,
-  Vector3,
+  type Vector3,
 } from 'three';
-import { PALETTE, PROP_COLORS } from './palette';
-import { seeded } from './random';
-import { TileGrid } from './tiling';
+import { SEA_FLOOR } from './map';
+import { PALETTE } from './palette';
 import { tuning } from './tuning';
 
-const GRID_CELL = 50; // meters per grid texture repeat
-const GROUND_SIZE = 16000;
-const PILLAR_TILE = 2000;
-const Y_AXIS = new Vector3(0, 1, 0);
-
-function gridTexture(): CanvasTexture {
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d')!;
-  const ground = new Color(PALETTE.ground);
-  ctx.fillStyle = `#${ground.getHexString()}`;
-  ctx.fillRect(0, 0, size, size);
-  ctx.fillStyle = `#${ground.clone().multiplyScalar(0.93).getHexString()}`;
-  ctx.fillRect(0, 0, size / 2, size / 2);
-  ctx.fillRect(size / 2, size / 2, size / 2, size / 2);
-  ctx.strokeStyle = `#${new Color(PALETTE.groundDark).getHexString()}`;
-  ctx.lineWidth = 3;
-  ctx.strokeRect(0, 0, size, size);
-  const tex = new CanvasTexture(canvas);
-  tex.wrapS = tex.wrapT = RepeatWrapping;
-  tex.repeat.set(GROUND_SIZE / GRID_CELL, GROUND_SIZE / GRID_CELL);
-  tex.minFilter = LinearMipmapLinearFilter;
-  tex.anisotropy = 8;
-  tex.colorSpace = SRGBColorSpace;
-  return tex;
-}
+const OCEAN_SIZE = 16000;
+/** The ocean planes move in steps of this size, so any future surface pattern stays fixed in the world. */
+const OCEAN_SNAP = 100;
+const SEA_FLOOR_PLANE = SEA_FLOOR - 4;
 
 export class World {
   readonly scene = new Scene();
-  private readonly ground: Mesh;
-  private readonly pillars = new Group();
-  private readonly pillarTiles = new TileGrid(this.pillars, PILLAR_TILE);
-  private readonly pillarGeo = new BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-  private readonly pillarMat = new MeshStandardMaterial({ flatShading: true });
+  private readonly ocean: Mesh;
+  private readonly seaFloor: Mesh;
+  private readonly oceanMaterial: MeshStandardMaterial;
 
   constructor() {
     const sky = new Color(PALETTE.sky);
@@ -71,62 +36,35 @@ export class World {
     sun.position.set(-300, 500, 200);
     this.scene.add(sun);
 
-    this.ground = new Mesh(
-      new PlaneGeometry(GROUND_SIZE, GROUND_SIZE).rotateX(-Math.PI / 2),
-      new MeshStandardMaterial({ map: gridTexture(), roughness: 1 }),
-    );
-    this.scene.add(this.ground);
-    this.scene.add(this.pillars);
-    this.buildPillars();
-  }
-
-  /** Rebuilds seeded content; call after seed or density changes. */
-  buildPillars(): void {
-    for (const child of this.pillars.children) (child as InstancedMesh).dispose();
-    this.pillars.clear();
-    this.pillarTiles.invalidate();
-
-    const count = Math.round(tuning.world.pillarsPerTile);
-    if (count === 0) return;
-    const rand = seeded(tuning.world.seed, 'pillars');
-    const source = new InstancedMesh(this.pillarGeo, this.pillarMat, count);
-    const m = new Matrix4();
-    const q = new Quaternion();
-    const pos = new Vector3();
-    const scale = new Vector3();
-    const color = new Color();
-    for (let i = 0; i < count; i++) {
-      const tall = rand() < 0.15;
-      const w = 6 + rand() * 18;
-      const h = tall ? 80 + rand() * 160 : 8 + rand() * 50;
-      pos.set((rand() - 0.5) * PILLAR_TILE, 0, (rand() - 0.5) * PILLAR_TILE);
-      q.setFromAxisAngle(Y_AXIS, rand() * Math.PI);
-      scale.set(w, h, w * (0.6 + rand() * 0.8));
-      source.setMatrixAt(i, m.compose(pos, q, scale));
-      source.setColorAt(i, color.setHex(PROP_COLORS[Math.floor(rand() * PROP_COLORS.length)]));
-    }
-
-    // 3x3 tiles sharing the same instance data.
-    for (let i = 0; i < 9; i++) {
-      const mesh = i === 0 ? source : new InstancedMesh(this.pillarGeo, this.pillarMat, count);
-      mesh.instanceMatrix = source.instanceMatrix;
-      mesh.instanceColor = source.instanceColor;
-      mesh.computeBoundingSphere();
-      this.pillars.add(mesh);
-    }
+    const plane = new PlaneGeometry(OCEAN_SIZE, OCEAN_SIZE).rotateX(-Math.PI / 2);
+    // Semi-transparent, so shallows over sand read lighter than deep water.
+    this.oceanMaterial = new MeshStandardMaterial({
+      color: PALETTE.sea,
+      roughness: 0.35,
+      transparent: true,
+      opacity: tuning.world.waterOpacity,
+      depthWrite: false,
+    });
+    this.ocean = new Mesh(plane, this.oceanMaterial);
+    this.ocean.renderOrder = 1;
+    this.seaFloor = new Mesh(plane, new MeshStandardMaterial({ color: PALETTE.seaDeep, roughness: 1 }));
+    // Well below the terrain chunks' own sea floor, so the two never z-fight at a distance.
+    this.seaFloor.position.y = SEA_FLOOR_PLANE;
+    this.scene.add(this.ocean, this.seaFloor);
   }
 
   setFogDensity(density: number): void {
     (this.scene.fog as FogExp2).density = density;
   }
 
+  setWaterOpacity(opacity: number): void {
+    this.oceanMaterial.opacity = opacity;
+  }
+
   update(player: Vector3): void {
-    // Ground follows the player in whole grid cells, so its pattern stays fixed in world space.
-    this.ground.position.set(
-      Math.round(player.x / GRID_CELL) * GRID_CELL,
-      0,
-      Math.round(player.z / GRID_CELL) * GRID_CELL,
-    );
-    this.pillarTiles.update(player);
+    const x = Math.round(player.x / OCEAN_SNAP) * OCEAN_SNAP;
+    const z = Math.round(player.z / OCEAN_SNAP) * OCEAN_SNAP;
+    this.ocean.position.set(x, 0, z);
+    this.seaFloor.position.set(x, SEA_FLOOR_PLANE, z);
   }
 }

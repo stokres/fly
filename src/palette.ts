@@ -12,6 +12,8 @@ export const PALETTE = {
   moss: 0xa7b89a,
   ember: 0xe0795b,
   ink: 0x3b4650,
+  sea: 0x4f8f94,
+  seaDeep: 0x2f5d68,
 } as const;
 
 /** Colors used for scattered props and landmarks. */

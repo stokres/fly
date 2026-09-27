@@ -37,6 +37,7 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     flapCost: [0, 1, 0.01],
     energyRegen: [0, 1, 0.01],
     groundClearance: [0, 10, 0.1],
+    slideTurnRate: [0, 5, 0.05],
   },
   camera: {
     distance: [2, 30, 0.1],
@@ -57,10 +58,11 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     fovResponse: [0.1, 10, 0.1],
     rollFactor: [0, 1, 0.01],
     rollResponse: [0.1, 15, 0.1],
+    groundClearance: [0, 20, 0.1],
   },
   thermals: {
     liftScale: [0, 3, 0.01],
-    perTile: [0, 60, 1],
+    extraCount: [0, 60, 1],
     radiusMin: [10, 200, 1],
     radiusMax: [10, 300, 1],
     strengthMin: [0, 15, 0.1],
@@ -74,14 +76,18 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     columnOpacity: [0, 0.5, 0.005],
   },
   landmarks: {
-    count: [0, 16, 1],
-    minSpacing: [200, 2500, 10],
     fogScale: [0, 1, 0.01],
+  },
+  terrain: {
+    detail: [0, 3, 0.05],
+    fillerIslets: [0, 60, 1],
+    lodDistance: [150, 2000, 10],
+    drawDistance: [1000, 8000, 50],
   },
   world: {
     seed: [1, 99999, 1],
     fogDensity: [0, 0.01, 0.0001],
-    pillarsPerTile: [0, 1000, 1],
+    waterOpacity: [0, 1, 0.01],
   },
   input: {
     gamepadDeadzone: [0, 0.5, 0.01],

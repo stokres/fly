@@ -2,8 +2,9 @@
 
 A small, calm browser game about flying: third person, a winged creature, open sky and the world below.
 
-Currently at **milestone 2, soft pull**: a placeholder creature over an endless test plane, with the flight
-model, follow camera, thermals to climb in, landmarks on the horizon and a live tuning panel. See [`CLAUDE.md`](CLAUDE.md) for the roadmap and
+Currently at **milestone 3, terrain**: a placeholder creature over a hand-designed archipelago (a volcano, a
+long ridge, a caldera with a lagoon, a mesa, islets), with thermals to climb in, landmarks to fly toward
+and a live tuning panel. See [`CLAUDE.md`](CLAUDE.md) for the roadmap and
 [`docs/design-starting-point.md`](docs/design-starting-point.md) for the design notes.
 
 ## Run
@@ -27,6 +28,9 @@ W dives and S climbs, like a flight stick. Flip it with `input → invertPitch` 
 
 **Thermals:** faint shimmering columns with motes drifting up and birds circling. Fly in and hold a turn to
 climb without flapping. Large landmarks on the horizon each have one beside them.
+
+**Start anywhere:** add `#x,y,z,heading` to the URL, e.g. `#-1900,700,2600,0` looks north at the volcano
+from 700 m up. Heading is in degrees, 0 = north, 90 = east.
 
 ## Tuning
 

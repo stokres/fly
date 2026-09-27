@@ -26,10 +26,13 @@ Full design rationale: `docs/design-starting-point.md` (a starting point, not a 
 | `src/camera.ts` | follow camera: per-axis springs, look-ahead, dynamic FOV, partial roll |
 | `src/input.ts` | keyboard + gamepad → `FlightInput` |
 | `src/creature.ts` | creature visuals (currently a placeholder box with wings) |
-| `src/world.ts` | scene, lights, fog, ground, seeded test pillars |
-| `src/landmarks.ts` | large horizon landmarks (arch, spire, ring, stack) with reduced fog |
+| `src/map.ts` | **the curated world**: islands, landmark placements, key thermals, spawn |
+| `src/heightfield.ts` | terrain height as a pure function (island profiles + noise), `surface()` for collision |
+| `src/terrain.ts` | terrain chunk meshes: streaming, LOD, skirts, per-face colors |
+| `src/world.ts` | scene, lights, fog, ocean surface and sea floor |
+| `src/landmarks.ts` | landmark meshes (arch, spire, ring, stack) with reduced fog |
 | `src/thermals.ts` | rising air columns: lift query, motes, circling birds, faint column |
-| `src/tiling.ts` | repeating-tile world helpers (`WORLD_TILE`, `wrapDelta`, 3x3 `TileGrid`) |
+| `src/noise.ts` | seeded simplex noise, `fbm`, `ridged` |
 | `src/random.ts` | seeded PRNG (`mulberry32`, `seeded(seed, salt)`) |
 | `src/palette.ts` | the limited color palette; all colors come from here |
 | `src/tuning.ts` | tuning panel, slider ranges, persistence, JSON export/import |
@@ -41,6 +44,10 @@ new section in an existing one.
 ## Conventions
 
 - Units: meters, seconds, radians internally (tuning values may be in degrees; suffix them `Deg`).
+- World: sea level is y = 0, north is -Z. The archipelago fits in ±5 km (`WORLD_HALF_SIZE`); beyond is open sea.
+- To place or reshape something in the world, edit `map.ts`. Noise only adds detail around authored shapes.
+- Ground queries go through `heightfield.surface()` (matches the rendered mesh), never the raw `height()`.
+- Dev: `#x,y,z,headingDeg` in the URL starts there (heading 0 = north, 90 = east); changing it respawns.
 - Forward is **-Z**. `yaw > 0` turns left, `pitch > 0` is nose up, `bank > 0` is right wing down.
   Object rotation order `'YXZ'`, `rotation.set(pitch, yaw, -bank)`.
 - **Every feel constant goes in `tuning-defaults.json`** with a slider range in `tuning.ts`. No magic numbers for
@@ -68,9 +75,10 @@ new section in an existing one.
 
 1. ~~Feel prototype~~: placeholder creature, endless grid plane with pillars, flight model + camera,
    tuning panel. Done: feel approved as good enough, to be refined later.
-2. **Soft pull** ← *current*: thermals (lift + motes, birds, faint column) and horizon landmarks with a
-   thermal beside each. Flying through things has no collision yet (decide with terrain).
-3. Terrain: curated, finite world (archipelago / valley), chunked with LOD.
+2. ~~Soft pull~~: thermals (lift + motes, birds, faint column) and horizon landmarks.
+3. **Terrain** ← *current*: curated archipelago in `map.ts` with noise detail, chunked with LOD, ocean.
+   Terrain collision is soft (skim, pay speed to be pushed up, slide off slopes when stalled).
+   Landmarks have no collision yet.
 4. Creature: real model, rim light, procedural wings driven by speed and input.
 5. Atmosphere: gradient sky shader + sun, distance/sun-tinted fog, cloud layers, time of day.
 6. Audio: speed-driven wind, flaps, ambient pad, spatial sounds from below.
