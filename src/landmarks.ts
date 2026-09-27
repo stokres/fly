@@ -82,19 +82,13 @@ export class Landmarks {
 
   constructor(heightfield: Heightfield) {
     const material = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
-    // Same exp² fog as everything else, with the density scaled down for landmarks only.
+    // Same fog as everything else (fog.ts), with the density scaled down for landmarks only.
     material.onBeforeCompile = (shader) => {
       shader.uniforms.fogScale = this.fogScale;
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform float fogScale;')
-        .replace(
-          '#include <fog_fragment>',
-          `#ifdef USE_FOG
-            float fd = fogDensity * fogScale;
-            float fogFactor = 1.0 - exp( - fd * fd * vFogDepth * vFogDepth );
-            gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
-          #endif`,
-        );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <common>',
+        '#include <common>\nuniform float fogScale;\n#define FOG_DENSITY_SCALE fogScale',
+      );
     };
     material.customProgramCacheKey = () => 'landmark-fog';
     this.mesh.material = material;

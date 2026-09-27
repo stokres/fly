@@ -31,7 +31,11 @@ Full design rationale: `docs/design-starting-point.md` (a starting point, not a 
 | `src/map.ts` | **the curated world**: islands, landmark placements, key thermals, spawn |
 | `src/heightfield.ts` | terrain height as a pure function (island profiles + noise), `surface()` for collision |
 | `src/terrain.ts` | terrain chunk meshes: streaming, LOD, skirts, per-face colors |
-| `src/world.ts` | scene, lights, fog, ocean surface and sea floor |
+| `src/world.ts` | scene, lights and fog (applied from the atmosphere), ocean surface and sea floor |
+| `src/atmosphere.ts` | time of day: sun direction and all sky/fog/light colors, blended from `SKY_KEYS` |
+| `src/fog.ts` | patches three's fog chunks: height falloff + sun tint; shared fog uniforms |
+| `src/sky.ts` | sky dome: gradient, sun disc and glow, moon |
+| `src/clouds.ts` | cloud layer (stacked noise slices) and `densityAt()` for the in-cloud whiteout |
 | `src/landmarks.ts` | landmark meshes (arch, spire, ring, stack) with reduced fog |
 | `src/thermals.ts` | rising air columns: lift query, motes, circling birds, faint column |
 | `src/noise.ts` | seeded simplex noise, `fbm`, `ridged` |
@@ -58,7 +62,11 @@ new section in an existing one.
 - No per-frame allocations in hot paths: reuse scratch `Vector3`s.
 - Anything procedural uses `seeded(tuning.world.seed, '<system>')` from `random.ts` (never `Math.random()`),
   so a good world can be reproduced and one system's settings don't reshuffle another's.
-- Colors come from `palette.ts`. Add a color there only with a reason.
+- Colors come from `palette.ts`. Add a color there only with a reason. Sky/light colors per time of day are
+  the `SKY_KEYS` table there.
+- Fog is global and custom (`fog.ts`): any built-in material gets it. A material can thin its own fog with
+  `#define FOG_DENSITY_SCALE <expr>` before the fog chunks (see landmarks). Unlit materials (MeshBasic,
+  Points) need tinting by the light themselves or they glow at night (see `Thermals.setLight`).
 - Systems don't import each other's internals; `main.ts` wires them (e.g. it passes thermal lift into
   `flight.step`).
 - Code comments explain *why*, briefly.
@@ -81,9 +89,11 @@ new section in an existing one.
 3. ~~Terrain~~: curated archipelago in `map.ts` with noise detail, chunked with LOD, ocean.
    Terrain collision is soft (skim, pay speed to be pushed up, slide off slopes when stalled).
    Landmarks have no collision yet.
-4. **Creature** ← *current*: procedural seabird built in code (no asset pipeline), wings posed from speed,
+4. ~~Creature~~: procedural seabird built in code (no asset pipeline), wings posed from speed,
    stick input and flaps; streamers; rim light. Wing poses live in `Creature.poseWing`.
-5. Atmosphere: gradient sky shader + sun, distance/sun-tinted fog, cloud layers, time of day.
+5. **Atmosphere** ← *current*: sky dome, time of day (frozen at 17:00 by default, optional cycle),
+   height + sun-tinted fog, cloud layer at ~480 m with in-cloud whiteout. Known: cloud slices cut hard
+   lines where they intersect terrain (needs soft particles / depth fade).
 6. Audio: speed-driven wind, flaps, ambient pad, spatial sounds from below.
 7. Polish: subtle bloom + LUT, comfort options (camera roll, FOV), performance pass.
 

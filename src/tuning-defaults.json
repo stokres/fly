@@ -88,9 +88,28 @@
     "lodDistance": 600,
     "drawDistance": 5500
   },
+  "atmosphere": {
+    "timeOfDay": 17,
+    "dayCycleMinutes": 0,
+    "sunMaxElevationDeg": 60,
+    "sunDiscDeg": 2.2,
+    "sunGlowAmount": 0.6,
+    "sunGlowPower": 8,
+    "fogHeightScale": 500
+  },
+  "clouds": {
+    "altitude": 480,
+    "thickness": 70,
+    "coverage": 0.45,
+    "softness": 0.12,
+    "scale": 3500,
+    "windSpeed": 3,
+    "opacity": 0.92,
+    "insideFogDensity": 0.02
+  },
   "world": {
     "seed": 1337,
-    "fogDensity": 0.0005,
+    "fogDensity": 0.0007,
     "waterOpacity": 0.78
   },
   "input": {

@@ -27,6 +27,7 @@ import { seeded } from './random';
 import { tuning } from './tuning';
 
 const MOTE_COLOR = new Color(PALETTE.bone);
+const COLUMN_COLOR = new Color(PALETTE.bone);
 
 export interface Thermal {
   x: number;
@@ -210,6 +211,12 @@ export class Thermals {
       lift += thermalLift(th, dx * dx + dz * dz, pos.y);
     }
     return lift * tuning.thermals.liftScale;
+  }
+
+  /** Tints the unlit markers (motes, columns) by the ambient light, so they don't glow at night. */
+  setLight(color: Color): void {
+    this.moteMaterial.color.copy(color);
+    this.columnMaterial.color.copy(color).multiply(COLUMN_COLOR);
   }
 
   update(dt: number): void {

@@ -225,6 +225,11 @@ export class Creature {
     this.object.add(this.bird, this.streamers.mesh);
   }
 
+  /** Rim light color, set from the sky so the silhouette glows in the ambient light of the moment. */
+  setRimColor(color: Color): void {
+    this.rim.rimColor.value.copy(color);
+  }
+
   update(dt: number, pose: FlightPose, drive: CreatureDrive): void {
     const c = tuning.creature;
     this.time += dt;

@@ -101,6 +101,25 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     lodDistance: [150, 2000, 10],
     drawDistance: [1000, 8000, 50],
   },
+  atmosphere: {
+    timeOfDay: [0, 24, 0.05],
+    dayCycleMinutes: [0, 120, 0.5],
+    sunMaxElevationDeg: [5, 90, 1],
+    sunDiscDeg: [0.2, 8, 0.1],
+    sunGlowAmount: [0, 1, 0.01],
+    sunGlowPower: [1, 64, 0.5],
+    fogHeightScale: [50, 3000, 10],
+  },
+  clouds: {
+    altitude: [100, 1500, 5],
+    thickness: [5, 400, 1],
+    coverage: [0, 1, 0.01],
+    softness: [0.01, 0.5, 0.01],
+    scale: [500, 10000, 50],
+    windSpeed: [0, 30, 0.1],
+    opacity: [0, 1, 0.01],
+    insideFogDensity: [0, 0.1, 0.001],
+  },
   world: {
     seed: [1, 99999, 1],
     fogDensity: [0, 0.01, 0.0001],
@@ -110,6 +129,9 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     gamepadDeadzone: [0, 0.5, 0.01],
   },
 };
+
+/** Values that can change on their own (e.g. the day cycle advances the clock): keep their sliders live. */
+const LIVE = new Set(['atmosphere.timeOfDay']);
 
 const LABELS: Partial<Record<string, string>> = {
   'input.invertPitch': 'invertPitch (W = climb)',
@@ -221,6 +243,7 @@ export function createTuningPanel(readouts: Record<string, number>): GUI {
       const controller = range
         ? folder.add(values, key, range[0], range[1], range[2])
         : folder.add(values, key);
+      if (LIVE.has(`${group}.${key}`)) controller.listen();
       const label = LABELS[`${group}.${key}`];
       if (label) controller.name(label);
       controller.onChange(() => {

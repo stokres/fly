@@ -1,11 +1,15 @@
 // Bootstrap and game loop. Flight runs on a fixed timestep; rendering interpolates between steps.
-import { ACESFilmicToneMapping, Vector3, WebGLRenderer } from 'three';
+import { fogUniforms } from './fog'; // also patches three's fog shaders: must load before anything renders
+import { ACESFilmicToneMapping, Color, Vector3, WebGLRenderer } from 'three';
+import { Atmosphere } from './atmosphere';
 import { FollowCamera } from './camera';
+import { Clouds } from './clouds';
 import { Creature, type CreatureDrive } from './creature';
 import { Flight, type FlightEnvironment, type FlightPose } from './flight';
 import { Heightfield } from './heightfield';
 import { Input } from './input';
 import { Landmarks } from './landmarks';
+import { Sky } from './sky';
 import { Terrain } from './terrain';
 import { Thermals } from './thermals';
 import { createTuningPanel, onTuningChange, tuning } from './tuning';
@@ -34,7 +38,13 @@ const flight = new Flight();
 const creature = new Creature();
 const follow = new FollowCamera(window.innerWidth / window.innerHeight);
 const input = new Input();
-world.scene.add(terrain.group, landmarks.mesh, thermals.group, creature.object);
+const atmosphere = new Atmosphere();
+const sky = new Sky();
+const clouds = new Clouds();
+world.scene.add(sky.mesh, terrain.group, landmarks.mesh, thermals.group, creature.object, ...clouds.slices);
+let inCloud = 0;
+const rimColor = new Color();
+const markerLight = new Color();
 
 /** Terrain or sea surface, whichever is higher. */
 const groundAt = (x: number, z: number) => Math.max(0, heightfield.surface(x, z));
@@ -45,7 +55,6 @@ let guiVisible = true;
 
 // Values read every frame need nothing here; these need a rebuild or a push into a material.
 onTuningChange((group, key) => {
-  if (group === 'world' && key === 'fogDensity') world.setFogDensity(tuning.world.fogDensity);
   if (group === 'world' && key === 'waterOpacity') world.setWaterOpacity(tuning.world.waterOpacity);
   if (group === 'landmarks' && key === 'fogScale') landmarks.setFogScale(tuning.landmarks.fogScale);
 
@@ -124,6 +133,16 @@ function frame(now: number): void {
   creature.update(dt, pose, drive);
   follow.update(dt, pose, velocity, flight.speed, groundAt);
   world.update(pose.position);
+  atmosphere.update(dt);
+  const camPos = follow.camera.position;
+  clouds.update(dt, camPos, atmosphere.state);
+  inCloud += (clouds.densityAt(camPos) - inCloud) * (1 - Math.exp(-6 * dt));
+  world.applyAtmosphere(atmosphere.state, inCloud, clouds.color);
+  fogUniforms.fogParams.value[0] *= 1 - inCloud; // no sun tint inside a cloud: an even whiteout
+  sky.update(atmosphere.state, camPos, inCloud, clouds.color);
+  const st = atmosphere.state;
+  thermals.setLight(markerLight.copy(st.ambientSky).multiplyScalar(Math.min(1, st.ambientIntensity * 0.75)));
+  creature.setRimColor(rimColor.copy(atmosphere.state.horizon).lerp(atmosphere.state.sun, 0.5));
   terrain.update(pose.position, TERRAIN_BUDGET_MS);
   thermals.update(dt);
   renderer.render(world.scene, follow.camera);

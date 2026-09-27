@@ -11,6 +11,7 @@ import {
   Scene,
   type Vector3,
 } from 'three';
+import type { AtmosphereState } from './atmosphere';
 import { SEA_FLOOR } from './map';
 import { PALETTE } from './palette';
 import { tuning } from './tuning';
@@ -25,16 +26,15 @@ export class World {
   private readonly ocean: Mesh;
   private readonly seaFloor: Mesh;
   private readonly oceanMaterial: MeshStandardMaterial;
+  private readonly ambient = new HemisphereLight();
+  private readonly key = new DirectionalLight();
+  private readonly fog: FogExp2;
 
   constructor() {
-    const sky = new Color(PALETTE.sky);
-    this.scene.background = sky;
-    this.scene.fog = new FogExp2(sky, tuning.world.fogDensity);
-
-    this.scene.add(new HemisphereLight(PALETTE.skyLight, 0x6b7a5a, 1.4));
-    const sun = new DirectionalLight(PALETTE.sun, 2.2);
-    sun.position.set(-300, 500, 200);
-    this.scene.add(sun);
+    this.fog = new FogExp2(new Color(PALETTE.sky), tuning.world.fogDensity);
+    this.scene.fog = this.fog;
+    this.scene.background = new Color(PALETTE.sky); // hidden behind the sky dome
+    this.scene.add(this.ambient, this.key, this.key.target);
 
     const plane = new PlaneGeometry(OCEAN_SIZE, OCEAN_SIZE).rotateX(-Math.PI / 2);
     // Semi-transparent, so shallows over sand read lighter than deep water.
@@ -53,8 +53,19 @@ export class World {
     this.scene.add(this.ocean, this.seaFloor);
   }
 
-  setFogDensity(density: number): void {
-    (this.scene.fog as FogExp2).density = density;
+  /**
+   * Lights and fog from the time of day. `inCloud` (0..1) closes the fog in to the cloud
+   * color while the camera is inside a cloud.
+   */
+  applyAtmosphere(state: AtmosphereState, inCloud: number, cloudColor: Color): void {
+    this.ambient.color.copy(state.ambientSky);
+    this.ambient.groundColor.copy(state.ambientGround);
+    this.ambient.intensity = state.ambientIntensity;
+    this.key.color.copy(state.light);
+    this.key.intensity = state.lightIntensity;
+    this.key.position.copy(this.key.target.position).addScaledVector(state.lightDir, 1000);
+    this.fog.color.copy(state.horizon).lerp(cloudColor, inCloud);
+    this.fog.density = tuning.world.fogDensity + (tuning.clouds.insideFogDensity - tuning.world.fogDensity) * inCloud;
   }
 
   setWaterOpacity(opacity: number): void {
@@ -66,5 +77,6 @@ export class World {
     const z = Math.round(player.z / OCEAN_SNAP) * OCEAN_SNAP;
     this.ocean.position.set(x, 0, z);
     this.seaFloor.position.set(x, SEA_FLOOR_PLANE, z);
+    this.key.target.position.set(x, 0, z);
   }
 }
