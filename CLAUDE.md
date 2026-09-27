@@ -38,6 +38,9 @@ Full design rationale: `docs/design-starting-point.md` (a starting point, not a 
 | `src/clouds.ts` | cloud layer (stacked noise slices) and `densityAt()` for the in-cloud whiteout |
 | `src/landmarks.ts` | landmark meshes (arch, spire, ring, stack) with reduced fog |
 | `src/thermals.ts` | rising air columns: lift query, motes, circling birds, faint column |
+| `src/audio.ts` | Web Audio context and mix bus (master, reverb), wind from airspeed, wing flaps, listener |
+| `src/music.ts` | ambient pad: four voices gliding between open chords in D |
+| `src/soundscape.ts` | sounds from below: coastline surf, positioned seabird calls at thermals |
 | `src/noise.ts` | seeded simplex noise, `fbm`, `ridged` |
 | `src/random.ts` | seeded PRNG (`mulberry32`, `seeded(seed, salt)`) |
 | `src/palette.ts` | the limited color palette; all colors come from here |
@@ -61,7 +64,9 @@ new section in an existing one.
 - Frame-rate independent smoothing: `x += (target - x) * (1 - Math.exp(-rate * dt))`.
 - No per-frame allocations in hot paths: reuse scratch `Vector3`s.
 - Anything procedural uses `seeded(tuning.world.seed, '<system>')` from `random.ts` (never `Math.random()`),
-  so a good world can be reproduced and one system's settings don't reshuffle another's.
+  so a good world can be reproduced and one system's settings don't reshuffle another's. (Audio noise and
+  call timing are the exception: they are not world content.)
+- Audio is synthesized (no sample files). It starts on the first key/click (browser policy); M mutes.
 - Colors come from `palette.ts`. Add a color there only with a reason. Sky/light colors per time of day are
   the `SKY_KEYS` table there.
 - Fog is global and custom (`fog.ts`): any built-in material gets it. A material can thin its own fog with
@@ -91,10 +96,11 @@ new section in an existing one.
    Landmarks have no collision yet.
 4. ~~Creature~~: procedural seabird built in code (no asset pipeline), wings posed from speed,
    stick input and flaps; streamers; rim light. Wing poses live in `Creature.poseWing`.
-5. **Atmosphere** ← *current*: sky dome, time of day (frozen at 17:00 by default, optional cycle),
+5. ~~Atmosphere~~: sky dome, time of day (frozen at 17:00 by default, optional cycle),
    height + sun-tinted fog, cloud layer at ~480 m with in-cloud whiteout. Known: cloud slices cut hard
    lines where they intersect terrain (needs soft particles / depth fade).
-6. Audio: speed-driven wind, flaps, ambient pad, spatial sounds from below.
+6. **Audio** ← *current*: synthesized wind (speed, gusts, dive whistle, bank pan, muffled in cloud),
+   flaps on the downstroke, ambient pad, coastline surf, 3D seabird calls at thermals.
 7. Polish: subtle bloom + LUT, comfort options (camera roll, FOV), performance pass.
 
 ## Open decisions (current defaults in bold)

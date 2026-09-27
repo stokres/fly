@@ -2,10 +2,11 @@
 
 A small, calm browser game about flying: third person, a winged creature, open sky and the world below.
 
-Currently at **milestone 5, atmosphere**: a long-winged seabird with procedurally animated wings, over a
+Currently at **milestone 6, audio**: a long-winged seabird with procedurally animated wings, over a
 hand-designed archipelago (a volcano, a long ridge, a caldera with a lagoon, a mesa, islets), under a sky
 with time of day, haze and a cloud layer to fly through; thermals to climb in, landmarks to fly toward and
-a live tuning panel. See [`CLAUDE.md`](CLAUDE.md) for the roadmap and
+a live tuning panel. Sound (wind, wingbeats, an ambient pad, surf, seabirds) is synthesized live and starts
+on your first key press. See [`CLAUDE.md`](CLAUDE.md) for the roadmap and
 [`docs/design-starting-point.md`](docs/design-starting-point.md) for the design notes.
 
 ## Run
@@ -23,6 +24,7 @@ npm run dev
 | Bank (turn) | A / D or ← / → | left stick X |
 | Flap | Space (hold to keep flapping) | A or RT |
 | Reset | R | |
+| Mute sound | M | |
 | Show / hide tuning panel | G | |
 
 W dives and S climbs, like a flight stick. Flip it with `input → invertPitch` in the panel.

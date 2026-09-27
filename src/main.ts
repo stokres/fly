@@ -2,6 +2,7 @@
 import { fogUniforms } from './fog'; // also patches three's fog shaders: must load before anything renders
 import { ACESFilmicToneMapping, Color, Vector3, WebGLRenderer } from 'three';
 import { Atmosphere } from './atmosphere';
+import { type AudioInput, GameAudio } from './audio';
 import { FollowCamera } from './camera';
 import { Clouds } from './clouds';
 import { Creature, type CreatureDrive } from './creature';
@@ -43,13 +44,33 @@ const sky = new Sky();
 const clouds = new Clouds();
 world.scene.add(sky.mesh, terrain.group, landmarks.mesh, thermals.group, creature.object, ...clouds.slices);
 let inCloud = 0;
+const audio = new GameAudio();
+// Browsers only allow sound after a gesture: start (or resume) on the first key or click.
+const startAudio = () => audio.start();
+window.addEventListener('keydown', startAudio);
+window.addEventListener('pointerdown', startAudio);
+const birdsAt = new Vector3();
+const audioInput: AudioInput = {
+  speed: 0, bank: 0, flapCount: 0, inCloud: 0, night: 0,
+  aboveGround: 0, coast: 0, sea: 0, birds: null, birdDistance: Infinity,
+};
+
+/** Fraction of open sea in a ring around a point (coastline detection for the surf). */
+function seaFraction(x: number, z: number): number {
+  let sea = heightfield.surface(x, z) < 0 ? 1 : 0;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    if (heightfield.surface(x + Math.cos(a) * 250, z + Math.sin(a) * 250) < 0) sea++;
+  }
+  return sea / 9;
+}
 const rimColor = new Color();
 const markerLight = new Color();
 
 /** Terrain or sea surface, whichever is higher. */
 const groundAt = (x: number, z: number) => Math.max(0, heightfield.surface(x, z));
 
-const readouts = { speed: 0, altitude: 0, aboveGround: 0, lift: 0, sink: 0, energy: 0, fps: 0, cpuMs: 0 };
+const readouts = { sound: 0, speed: 0, altitude: 0, aboveGround: 0, lift: 0, sink: 0, energy: 0, fps: 0, cpuMs: 0 };
 const gui = createTuningPanel(readouts);
 let guiVisible = true;
 
@@ -107,6 +128,7 @@ function frame(now: number): void {
   last = now;
 
   if (input.wasPressed('KeyR')) reset();
+  if (input.wasPressed('KeyM')) audio.toggleMute();
   if (input.wasPressed('KeyG')) {
     guiVisible = !guiVisible;
     gui.show(guiVisible);
@@ -144,6 +166,21 @@ function frame(now: number): void {
   thermals.setLight(markerLight.copy(st.ambientSky).multiplyScalar(Math.min(1, st.ambientIntensity * 0.75)));
   creature.setRimColor(rimColor.copy(atmosphere.state.horizon).lerp(atmosphere.state.sun, 0.5));
   terrain.update(pose.position, TERRAIN_BUDGET_MS);
+
+  if (audio.started) {
+    const sea = seaFraction(pose.position.x, pose.position.z);
+    audioInput.speed = flight.speed;
+    audioInput.bank = pose.bank;
+    audioInput.flapCount = flight.flapCount;
+    audioInput.inCloud = inCloud;
+    audioInput.night = atmosphere.state.night;
+    audioInput.aboveGround = flight.position.y - env.ground;
+    audioInput.sea = sea;
+    audioInput.coast = 4 * sea * (1 - sea);
+    audioInput.birdDistance = thermals.nearestBirds(camPos, birdsAt);
+    audioInput.birds = Number.isFinite(audioInput.birdDistance) ? birdsAt : null;
+    audio.update(dt, audioInput, follow.camera);
+  }
   thermals.update(dt);
   renderer.render(world.scene, follow.camera);
   input.endFrame();
@@ -155,6 +192,7 @@ function frame(now: number): void {
     fpsFrames = 0;
     fpsTime = 0;
   }
+  readouts.sound = round(audio.level(), 3);
   readouts.speed = round(flight.speed, 1);
   readouts.altitude = round(flight.position.y, 1);
   readouts.aboveGround = round(flight.position.y - env.ground, 1);

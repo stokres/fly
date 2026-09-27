@@ -219,6 +219,24 @@ export class Thermals {
     this.columnMaterial.color.copy(color).multiply(COLUMN_COLOR);
   }
 
+  /**
+   * Center of the nearest birds' circling (mid-height of its thermal) into `out`.
+   * Returns the distance to it, or Infinity if no thermal has birds.
+   */
+  nearestBirds(pos: Vector3, out: Vector3): number {
+    if (tuning.thermals.birdsPerThermal < 1) return Infinity;
+    let best = Infinity;
+    for (const th of this.thermals) {
+      const y = (th.base + th.top) / 2;
+      const d = Math.hypot(th.x - pos.x, y - pos.y, th.z - pos.z);
+      if (d < best) {
+        best = d;
+        out.set(th.x, y, th.z);
+      }
+    }
+    return best;
+  }
+
   update(dt: number): void {
     this.time += dt;
     this.updateMotes();

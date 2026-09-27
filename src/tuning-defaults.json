@@ -107,6 +107,22 @@
     "opacity": 0.92,
     "insideFogDensity": 0.02
   },
+  "audio": {
+    "masterVolume": 0.8,
+    "windVolume": 0.55,
+    "windMinSpeed": 6,
+    "windMaxSpeed": 70,
+    "windCutoffMin": 220,
+    "windCutoffMax": 2600,
+    "whistleVolume": 0.12,
+    "flapVolume": 0.8,
+    "musicVolume": 0.6,
+    "chordSeconds": 22,
+    "wavesVolume": 0.5,
+    "surfFalloff": 160,
+    "birdsVolume": 0.5,
+    "birdHearing": 350
+  },
   "world": {
     "seed": 1337,
     "fogDensity": 0.0007,
