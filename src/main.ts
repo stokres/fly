@@ -1,7 +1,7 @@
 // Bootstrap and game loop. Flight runs on a fixed timestep; rendering interpolates between steps.
 import { ACESFilmicToneMapping, Vector3, WebGLRenderer } from 'three';
 import { FollowCamera } from './camera';
-import { Creature } from './creature';
+import { Creature, type CreatureDrive } from './creature';
 import { Flight, type FlightEnvironment, type FlightPose } from './flight';
 import { Heightfield } from './heightfield';
 import { Input } from './input';
@@ -62,6 +62,7 @@ onTuningChange((group, key) => {
 
 const pose: FlightPose = { position: new Vector3(), yaw: 0, pitch: 0, bank: 0 };
 const velocity = new Vector3();
+const drive: CreatureDrive = { speed: 0, pitchInput: 0, rollInput: 0, flapCount: 0 };
 const env: FlightEnvironment = { updraft: 0, ground: 0, groundSlopeX: 0, groundSlopeZ: 0 };
 
 /** Optional start override from the URL: `#x,y,z,headingDeg` (heading 0 = north, 90 = east). */
@@ -116,7 +117,11 @@ function frame(now: number): void {
   flight.interpolate(accumulator / FIXED_DT, pose);
   flight.velocity(velocity);
 
-  creature.update(dt, pose, flight.flapCount);
+  drive.speed = flight.speed;
+  drive.pitchInput = intent.pitch;
+  drive.rollInput = intent.roll;
+  drive.flapCount = flight.flapCount;
+  creature.update(dt, pose, drive);
   follow.update(dt, pose, velocity, flight.speed, groundAt);
   world.update(pose.position);
   terrain.update(pose.position, TERRAIN_BUDGET_MS);

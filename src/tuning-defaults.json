@@ -47,6 +47,23 @@
     "rollResponse": 4,
     "groundClearance": 3
   },
+  "creature": {
+    "scale": 1,
+    "tuckSpeedMin": 30,
+    "tuckSpeedMax": 60,
+    "flapDuration": 0.42,
+    "flapAmplitudeDeg": 45,
+    "dihedralDeg": 14,
+    "flutterDeg": 2.5,
+    "headTurnDeg": 25,
+    "tailSpread": 1,
+    "rimStrength": 0.6,
+    "rimPower": 2.5,
+    "streamerLength": 3,
+    "streamerWidth": 0.09,
+    "streamerWave": 0.12,
+    "streamerSag": 1.5
+  },
   "thermals": {
     "liftScale": 1,
     "radiusMin": 50,

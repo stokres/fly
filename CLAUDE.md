@@ -13,7 +13,8 @@ Full design rationale: `docs/design-starting-point.md` (a starting point, not a 
 
 ## Commands
 
-- `npm run dev`: dev server with HMR
+- `npm run dev`: dev server with HMR. `/dev/creature.html` is the creature lab (orbit view, drive sliders,
+  URL params like `?view=0,6,0.01&speed=65`); dev-only, not in the production build.
 - `npm run build`: typecheck + production build (must pass before every commit)
 - `npm run typecheck`: `tsc --noEmit` only
 
@@ -25,7 +26,8 @@ Full design rationale: `docs/design-starting-point.md` (a starting point, not a 
 | `src/flight.ts` | arcade flight model: pitch/bank/yaw, speed, sink, flap, energy |
 | `src/camera.ts` | follow camera: per-axis springs, look-ahead, dynamic FOV, partial roll |
 | `src/input.ts` | keyboard + gamepad → `FlightInput` |
-| `src/creature.ts` | creature visuals (currently a placeholder box with wings) |
+| `src/creature.ts` | the creature: procedural body, jointed wings, tail, head; animation from flight state; rim light |
+| `src/streamers.ts` | tail ribbon streamers, simulated as world-space chains |
 | `src/map.ts` | **the curated world**: islands, landmark placements, key thermals, spawn |
 | `src/heightfield.ts` | terrain height as a pure function (island profiles + noise), `surface()` for collision |
 | `src/terrain.ts` | terrain chunk meshes: streaming, LOD, skirts, per-face colors |
@@ -76,10 +78,11 @@ new section in an existing one.
 1. ~~Feel prototype~~: placeholder creature, endless grid plane with pillars, flight model + camera,
    tuning panel. Done: feel approved as good enough, to be refined later.
 2. ~~Soft pull~~: thermals (lift + motes, birds, faint column) and horizon landmarks.
-3. **Terrain** ← *current*: curated archipelago in `map.ts` with noise detail, chunked with LOD, ocean.
+3. ~~Terrain~~: curated archipelago in `map.ts` with noise detail, chunked with LOD, ocean.
    Terrain collision is soft (skim, pay speed to be pushed up, slide off slopes when stalled).
    Landmarks have no collision yet.
-4. Creature: real model, rim light, procedural wings driven by speed and input.
+4. **Creature** ← *current*: procedural seabird built in code (no asset pipeline), wings posed from speed,
+   stick input and flaps; streamers; rim light. Wing poses live in `Creature.poseWing`.
 5. Atmosphere: gradient sky shader + sun, distance/sun-tinted fog, cloud layers, time of day.
 6. Audio: speed-driven wind, flaps, ambient pad, spatial sounds from below.
 7. Polish: subtle bloom + LUT, comfort options (camera roll, FOV), performance pass.
