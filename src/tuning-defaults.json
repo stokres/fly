@@ -57,7 +57,7 @@
     "flutterDeg": 2.5,
     "headTurnDeg": 25,
     "tailSpread": 1,
-    "rimStrength": 0.6,
+    "rimStrength": 0.3,
     "rimPower": 2.5,
     "streamerLength": 3,
     "streamerWidth": 0.09,

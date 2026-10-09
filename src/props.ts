@@ -96,7 +96,8 @@ export class Props {
         mesh.count = 0;
         mesh.frustumCulled = false;
         mesh.castShadow = shadow;
-        mesh.receiveShadow = shadow;
+        // Huge lumpy rock self-shadows into stripes at grazing sun; landmarks only cast.
+        mesh.receiveShadow = shadow && !items[0].landmark;
         this.group.add(mesh);
         return mesh;
       };

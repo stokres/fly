@@ -327,3 +327,15 @@ def transformed(part, matrix):
     """Copy of a part transformed by a mathutils Matrix (4x4)."""
     rot = matrix.to_3x3()
     return Part([matrix @ v for v in part.verts], part.faces, [rot @ n for n in part.normals], part.colors)
+
+
+def smooth(me, iterations=5, factor=0.5):
+    """Laplacian-style smoothing of a mesh datablock (removes metaball lumps)."""
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    for _ in range(iterations):
+        bmesh.ops.smooth_vert(bm, verts=bm.verts, factor=factor, use_axis_x=True, use_axis_y=True, use_axis_z=True)
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+    return me

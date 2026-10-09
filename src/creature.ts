@@ -1,5 +1,6 @@
-// The creature: a stylized long-winged seabird built in code, animated procedurally from the
-// flight state rather than from baked clips, so every wing pose answers speed and input.
+// The creature: a pearl-white spirit bird modeled in Blender (art/creature.py) as rigid parts,
+// assembled here into a skeleton and animated procedurally from the flight state rather than from
+// baked clips, so every wing pose answers speed and input.
 //
 //  - glide: wings spread, slight gull droop, breathing dihedral, tips flutter at speed
 //  - dive:  wings tuck back with speed (falcon stoop), tail closes
@@ -8,22 +9,9 @@
 //  - turns: the head looks into the turn, wings go asymmetric, the tail twists
 //
 // Local frame: forward -Z, up +Y, right +X (same as the flight model).
-import {
-  BufferAttribute,
-  BufferGeometry,
-  Color,
-  ConeGeometry,
-  DoubleSide,
-  Group,
-  LatheGeometry,
-  MathUtils,
-  Mesh,
-  MeshStandardMaterial,
-  SphereGeometry,
-  Vector2,
-} from 'three';
+import { type BufferGeometry, Color, DoubleSide, Group, MathUtils, Mesh, MeshLambertMaterial } from 'three';
 import type { FlightPose } from './flight';
-import { PALETTE } from './palette';
+import { loadGeometries } from './models';
 import { Streamers } from './streamers';
 import { tuning } from './tuning';
 
@@ -38,23 +26,10 @@ export interface CreatureDrive {
 }
 
 const DEG = Math.PI / 180;
-
-/** Adds a view-angle rim light (fresnel) so the silhouette reads against a bright sky. */
-function withRim(material: MeshStandardMaterial, rim: RimUniforms): MeshStandardMaterial {
-  material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, rim);
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 rimColor;\nuniform float rimStrength;\nuniform float rimPower;')
-      .replace(
-        '#include <emissivemap_fragment>',
-        `#include <emissivemap_fragment>
-        float rimFactor = pow(1.0 - saturate(abs(dot(normal, normalize(vViewPosition)))), rimPower);
-        totalEmissiveRadiance += rimColor * rimFactor * rimStrength;`,
-      );
-  };
-  material.customProgramCacheKey = () => 'creature-rim';
-  return material;
-}
+/** Primary feather lengths (m), outermost first. */
+const PRIMARIES = [1.0, 0.98, 0.93, 0.86, 0.78, 0.69, 0.6];
+/** Tail plume lengths (m), left to right. */
+const PLUMES = [1.4, 1.85, 2.4, 1.85, 1.4];
 
 interface RimUniforms {
   rimColor: { value: Color };
@@ -62,60 +37,21 @@ interface RimUniforms {
   rimPower: { value: number };
 }
 
-/**
- * Flat wing panel in the XZ plane, hinge along the Z axis at x = 0, extending to +X.
- * Leading edge toward -Z. A raised mid-chord line gives a faceted camber.
- */
-function panel(
-  length: number,
-  rootChord: number,
-  tipChord: number,
-  tipSweep: number,
-  color: Color,
-  tipColor = color,
-  overlap = 0,
-): BufferGeometry {
-  const le = 0.35; // fraction of chord ahead of the hinge line
-  const camber = 0.035;
-  // `overlap` extends the root back past the hinge, so folding a joint never opens a gap.
-  const r = -overlap;
-  const pts = [
-    [r, 0, -rootChord * le], // root leading edge
-    [r, camber, rootChord * (0.5 - le)], // root mid
-    [r, 0, rootChord * (1 - le)], // root trailing edge
-    [length, 0, tipSweep - tipChord * le],
-    [length, camber * 0.6, tipSweep + tipChord * (0.5 - le)],
-    [length, 0, tipSweep + tipChord * (1 - le)],
-  ];
-  const tris = [0, 3, 1, 1, 3, 4, 1, 4, 2, 2, 4, 5];
-  return build(pts, tris, (i) => (i < 3 ? color : tipColor));
-}
-
-/** One long feather: tapered blade from its base (origin) to +X. */
-function feather(length: number, width: number, base: Color, tip: Color): BufferGeometry {
-  const pts = [
-    [0, 0, -width * 0.35],
-    [0, 0.01, width * 0.65],
-    [length * 0.75, 0.012, -width * 0.3],
-    [length * 0.8, 0, width * 0.55],
-    [length, 0, width * 0.1],
-  ];
-  const tris = [0, 2, 1, 1, 2, 3, 2, 4, 3];
-  return build(pts, tris, (i) => (i < 2 ? base : tip));
-}
-
-function build(pts: number[][], tris: number[], colorOf: (i: number) => Color): BufferGeometry {
-  const pos = new Float32Array(tris.length * 3);
-  const col = new Float32Array(tris.length * 3);
-  tris.forEach((idx, k) => {
-    pos.set(pts[idx], k * 3);
-    colorOf(idx).toArray(col, k * 3);
-  });
-  const geo = new BufferGeometry();
-  geo.setAttribute('position', new BufferAttribute(pos, 3));
-  geo.setAttribute('color', new BufferAttribute(col, 3));
-  geo.computeVertexNormals();
-  return geo;
+/** Adds a view-angle rim light (fresnel) so the silhouette reads against a bright sky. */
+function withRim(material: MeshLambertMaterial, rim: RimUniforms): MeshLambertMaterial {
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, rim);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 rimColor;\nuniform float rimStrength;\nuniform float rimPower;')
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        float rimFactor = pow( 1.0 - saturate( abs( dot( normal, normalize( vViewPosition ) ) ) ), rimPower );
+        totalEmissiveRadiance += rimColor * rimFactor * rimStrength;`,
+      );
+  };
+  material.customProgramCacheKey = () => 'creature-rim';
+  return material;
 }
 
 /** Joint hierarchy of one (right) wing. The left wing is the same hierarchy under a mirror. */
@@ -125,29 +61,32 @@ class Wing {
   readonly wrist = new Group();
   readonly primaries: Group[] = [];
 
-  constructor(material: MeshStandardMaterial) {
-    const bone = new Color(PALETTE.bone);
-    const sand = new Color(PALETTE.sand);
-    const ember = new Color(PALETTE.ember);
+  constructor() {
     for (const joint of [this.shoulder, this.elbow, this.wrist]) joint.rotation.order = 'YZX';
-
-    this.shoulder.position.set(0.12, 0.06, -0.1);
-    this.shoulder.add(new Mesh(panel(0.55, 0.52, 0.5, 0.03, bone), material));
-    this.elbow.position.set(0.55, 0, 0.03);
+    this.shoulder.position.set(0.17, 0.1, -0.1);
+    this.elbow.position.set(0.68, 0, 0.0);
+    this.wrist.position.set(0.78, 0, 0.03);
     this.shoulder.add(this.elbow);
-    this.elbow.add(new Mesh(panel(0.62, 0.5, 0.42, 0.06, bone, sand, 0.12), material));
-    this.wrist.position.set(0.62, 0, 0.06);
     this.elbow.add(this.wrist);
-    this.wrist.add(new Mesh(panel(0.22, 0.42, 0.3, 0.04, sand, sand, 0.12), material));
-
-    // Primary feathers fan out from the hand; their spread is animated.
-    for (let i = 0; i < 5; i++) {
+    PRIMARIES.forEach((len, i) => {
       const f = new Group();
-      f.position.set(0.14 + i * 0.015, 0, -0.08 + i * 0.07);
-      f.add(new Mesh(feather(0.72 - i * 0.07, 0.13, sand, ember.clone().lerp(sand, i * 0.12)), material));
+      f.position.set(0.12 + i * 0.03, -0.005 * i, -0.08 + i * 0.065);
+      f.scale.set(len, 1, 1);
       this.wrist.add(f);
       this.primaries.push(f);
-    }
+    });
+  }
+
+  dress(parts: Map<string, BufferGeometry>, material: MeshLambertMaterial): void {
+    const mesh = (name: string) => {
+      const m = new Mesh(parts.get(name), material);
+      m.castShadow = true;
+      return m;
+    };
+    this.shoulder.add(mesh('bird_arm'));
+    this.elbow.add(mesh('bird_forearm'));
+    this.wrist.add(mesh('bird_hand'));
+    for (const f of this.primaries) f.add(mesh('bird_primary'));
   }
 }
 
@@ -158,11 +97,11 @@ export class Creature {
   private readonly head = new Group();
   private readonly tail = new Group();
   private readonly tailFeathers: Group[] = [];
-  private readonly right: Wing;
-  private readonly left: Wing;
+  private readonly right = new Wing();
+  private readonly left = new Wing();
   private readonly streamers: Streamers;
   private readonly rim: RimUniforms = {
-    rimColor: { value: new Color(PALETTE.skyLight) },
+    rimColor: { value: new Color(0xe4f3ff) },
     rimStrength: { value: 0.6 },
     rimPower: { value: 2.5 },
   };
@@ -178,51 +117,39 @@ export class Creature {
   private time = 0;
 
   constructor() {
-    const bodyMat = withRim(new MeshStandardMaterial({ color: PALETTE.bone, flatShading: true, roughness: 0.8 }), this.rim);
-    const wingMat = withRim(
-      new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85, side: DoubleSide }),
-      this.rim,
-    );
-    const beakMat = new MeshStandardMaterial({ color: PALETTE.terracotta, flatShading: true });
-
-    // Body: a lathe spindle from tail (y = -0.75) to neck, laid along -Z.
-    const profile = [
-      [0.0, -0.75], [0.06, -0.62], [0.13, -0.38], [0.18, -0.08], [0.17, 0.18], [0.11, 0.36], [0.07, 0.44],
-    ].map(([r, y]) => new Vector2(r, y));
-    const bodyGeo = new LatheGeometry(profile, 8).rotateX(-Math.PI / 2).scale(1.05, 0.9, 1);
-    this.bird.add(new Mesh(bodyGeo, bodyMat));
-
-    this.head.position.set(0, 0.04, -0.46);
-    const skull = new Mesh(new SphereGeometry(0.11, 7, 5).scale(0.9, 0.85, 1.3), bodyMat);
-    skull.position.z = -0.06;
-    const beak = new Mesh(new ConeGeometry(0.035, 0.22, 5).rotateX(-Math.PI / 2), beakMat);
-    beak.position.set(0, -0.015, -0.26);
-    this.head.add(skull, beak);
-    this.bird.add(this.head);
-
-    this.right = new Wing(wingMat);
-    this.left = new Wing(wingMat);
+    this.head.position.set(0, 0.28, -0.62);
+    this.tail.position.set(0, 0.04, 0.6);
+    this.tail.rotation.order = 'ZXY';
+    PLUMES.forEach((len) => {
+      const f = new Group();
+      f.scale.set(1, 1, len);
+      this.tail.add(f);
+      this.tailFeathers.push(f);
+    });
     const mirror = new Group();
     mirror.scale.x = -1; // same joint values on both sides give a symmetric pose
     mirror.add(this.left.shoulder);
-    this.bird.add(this.right.shoulder, mirror);
-
-    // Tail: a fan of feathers pointing back (+Z).
-    const bone = new Color(PALETTE.bone);
-    const sand = new Color(PALETTE.sand);
-    this.tail.position.set(0, 0.02, 0.62);
-    this.tail.rotation.order = 'ZXY';
-    for (let i = 0; i < 5; i++) {
-      const f = new Group();
-      f.add(new Mesh(feather(0.5 - Math.abs(i - 2) * 0.04, 0.12, bone, sand).rotateY(-Math.PI / 2), wingMat));
-      this.tail.add(f);
-      this.tailFeathers.push(f);
-    }
-    this.bird.add(this.tail);
+    this.bird.add(this.head, this.tail, this.right.shoulder, mirror);
     this.bird.rotation.order = 'YXZ';
 
     this.streamers = new Streamers();
     this.object.add(this.bird, this.streamers.mesh);
+
+    const material = withRim(new MeshLambertMaterial({ vertexColors: true, side: DoubleSide }), this.rim);
+    loadGeometries('creature.glb').then((parts) => {
+      const body = new Mesh(parts.get('bird_body'), material);
+      const head = new Mesh(parts.get('bird_head'), material);
+      body.castShadow = head.castShadow = true;
+      this.bird.add(body);
+      this.head.add(head);
+      this.right.dress(parts, material);
+      this.left.dress(parts, material);
+      for (const f of this.tailFeathers) {
+        const m = new Mesh(parts.get('bird_plume'), material);
+        m.castShadow = true;
+        f.add(m);
+      }
+    });
   }
 
   /** Rim light color, set from the sky so the silhouette glows in the ambient light of the moment. */
@@ -265,7 +192,7 @@ export class Creature {
 
     // Tail: spreads when slow or flaring, closes in a dive; pitches with the stick, twists in turns.
     const tailSpread = MathUtils.lerp(0.15, 0.55, Math.max(1 - tuck, this.flare)) * c.tailSpread;
-    this.tailFeathers.forEach((f, i) => (f.rotation.y = (i - 2) * tailSpread * 0.5));
+    this.tailFeathers.forEach((f, i) => (f.rotation.y = (i - 2) * tailSpread * 0.45));
     this.tail.rotation.set(this.pitchIn * 0.35 + this.flare * 0.3, 0, -this.roll * 0.3);
 
     this.object.updateMatrixWorld();

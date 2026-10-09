@@ -221,18 +221,21 @@ def sea_arch():
     rnd = random.Random(9)
     balls = []
     for side in (-1, 1):
-        for i in range(9):
-            z = -25 + i * 18
-            balls.append(((side * (95 - i * 2) + rnd.uniform(-6, 6), rnd.uniform(-8, 8), z), 34 - i * 1.0))
-    for i in range(13):
-        t = i / 12
+        for i in range(22):
+            t = i / 21
+            z = -25 + t * 160
+            balls.append(((side * (95 - t * 18) + math.sin(t * 5 + side) * 4, math.cos(t * 4) * 4, z), 33 - t * 8))
+    for i in range(30):
+        t = i / 29
         x = -100 + t * 200
         z = 140 + math.sin(t * math.pi) * 22
-        balls.append(((x, rnd.uniform(-6, 6), z), 30 + rnd.uniform(-4, 6)))
-    COLLIDE["arch"] = [(b[0], b[1] * 0.9) for b in balls]
-    me = lib.metaball(balls, resolution=6.0)
-    lib.displace(me, 2.5, 0.02, seed=3)
-    me = lib.decimate(me, 5000)
+        balls.append(((x, math.sin(t * 7) * 3, z), 30 + 4 * math.sin(t * 9 + 1)))
+    COLLIDE["arch"] = [(b[0], b[1] * 0.9) for b in balls[::2]]
+    me = lib.metaball(balls, resolution=5.0)
+    lib.smooth(me, iterations=10, factor=0.7)
+    lib.displace(me, 3.0, 0.035, seed=3)
+    lib.smooth(me, iterations=2, factor=0.5)
+    me = lib.decimate(me, 6000)
     part = lib.from_mesh(me, ROCK)
     lib.bake_ao(part, samples=14, distance=25, strength=0.3)
     lib.to_object("arch_lod0", part)
@@ -241,12 +244,13 @@ def sea_arch():
 def needle():
     rnd = random.Random(4)
     balls = []
-    for i in range(16):
-        t = i / 15
-        balls.append(((rnd.uniform(-5, 5), rnd.uniform(-5, 5), -20 + t * 250), 36 * (1 - t) ** 0.8 + 11))
-    COLLIDE["needle"] = [(b[0], b[1] * 0.9) for b in balls]
-    me = lib.metaball(balls, resolution=5.0)
-    lib.displace(me, 5.0, 0.03, seed=8)
+    for i in range(40):
+        t = i / 39
+        balls.append(((math.sin(t * 6) * 4, math.cos(t * 5) * 4, -20 + t * 250), 36 * (1 - t) ** 0.8 + 11))
+    COLLIDE["needle"] = [(b[0], b[1] * 0.9) for b in balls[::3]]
+    me = lib.metaball(balls, resolution=4.0)
+    lib.smooth(me, iterations=10, factor=0.7)
+    lib.displace(me, 3.0, 0.04, seed=8)
     top = max(v.co.z for v in me.vertices) - 12
     for v in me.vertices:  # a flat summit for the shrine
         if v.co.z > top:

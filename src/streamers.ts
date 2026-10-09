@@ -11,7 +11,6 @@ import {
   type Object3D,
   Vector3,
 } from 'three';
-import { PALETTE } from './palette';
 import { tuning } from './tuning';
 
 const SEGMENTS = 16;
@@ -51,9 +50,9 @@ export class Streamers {
       this.geometry,
       // A little self-light keeps the ribbons from going black when seen from below or edge-on.
       new MeshStandardMaterial({
-        color: PALETTE.ember,
-        emissive: PALETTE.ember,
-        emissiveIntensity: 0.35,
+        color: 0xf2b84b,
+        emissive: 0xf08a4b,
+        emissiveIntensity: 0.45,
         side: DoubleSide,
         roughness: 0.7,
       }),
