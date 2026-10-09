@@ -156,6 +156,20 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     speedBlur: [0, 3, 0.01],
     pixelRatioMax: [0.5, 2, 0.25],
   },
+  vegetation: {
+    density: [0, 3, 0.05],
+    lod0Distance: [50, 1000, 10],
+    lod1Distance: [200, 3000, 10],
+    drawDistance: [500, 6000, 50],
+  },
+  grass: {
+    density: [0, 3, 0.05],
+    radius: [20, 250, 5],
+    height: [0.2, 3, 0.05],
+    wind: [0, 3, 0.05],
+    wake: [0, 3, 0.05],
+    maxCameraHeight: [10, 500, 5],
+  },
   world: {
     seed: [1, 99999, 1],
     fogDensity: [0, 0.01, 0.0001],

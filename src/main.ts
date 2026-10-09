@@ -17,6 +17,9 @@ import { Terrain } from './terrain';
 import { TerrainMaps } from './terrainMaps';
 import { Thermals } from './thermals';
 import { createTuningPanel, onTuningChange, tuning } from './tuning';
+import { Grass } from './grass';
+import { type Clearing, Vegetation } from './vegetation';
+import { LANDMARKS } from './map';
 import { Water } from './water';
 import { World } from './world';
 
@@ -45,6 +48,8 @@ const maps = new TerrainMaps(heightfieldOptions());
 const world = new World();
 const terrain = new Terrain(heightfield, maps);
 const water = new Water(maps);
+const vegetation = new Vegetation(heightfield, maps, landmarkClearings());
+const grass = new Grass(heightfield, maps);
 const landmarks = new Landmarks(heightfield);
 const thermals = new Thermals();
 thermals.rebuild(heightfield);
@@ -55,7 +60,7 @@ const input = new Input();
 const atmosphere = new Atmosphere();
 const sky = new Sky();
 const clouds = new Clouds();
-world.scene.add(sky.mesh, water.mesh, terrain.group, landmarks.mesh, thermals.group, creature.object, ...clouds.slices);
+world.scene.add(grass.mesh, vegetation.group, sky.mesh, water.mesh, terrain.group, landmarks.mesh, thermals.group, creature.object, ...clouds.slices);
 const castShadows = (o: Object3D) => o.traverse((c) => (c.castShadow = c.receiveShadow = true));
 castShadows(creature.object);
 castShadows(landmarks.mesh);
@@ -85,6 +90,11 @@ function seaFraction(x: number, z: number): number {
 const rimColor = new Color();
 const markerLight = new Color();
 
+/** Places where no vegetation grows: around landmarks. */
+function landmarkClearings(): Clearing[] {
+  return LANDMARKS.map((l) => [l.x, l.z, 140] as Clearing);
+}
+
 /** Terrain or sea surface, whichever is higher. */
 const groundAt = (x: number, z: number) => Math.max(0, heightfield.surface(x, z));
 
@@ -103,6 +113,8 @@ onTuningChange((group, key) => {
     heightfield = new Heightfield(heightfieldOptions());
     maps.rebake(heightfieldOptions());
     terrain.setHeightfield(heightfield);
+    vegetation.setHeightfield(heightfield);
+    grass.setHeightfield(heightfield);
     landmarks.rebuild(heightfield);
   }
   const live = ['liftScale', 'moteSize', 'birdSize', 'columnOpacity'];
@@ -192,6 +204,8 @@ function frame(now: number): void {
   thermals.setLight(markerLight.copy(st.ambientSky).multiplyScalar(Math.min(1, st.ambientIntensity * 0.75)));
   creature.setRimColor(rimColor.copy(atmosphere.state.horizon).lerp(atmosphere.state.sun, 0.5));
   terrain.update(pose.position, TERRAIN_BUDGET_MS);
+  vegetation.update(dt, camPos);
+  grass.update(dt, camPos, pose.position, groundAt(camPos.x, camPos.z));
 
   if (audio.started) {
     const sea = seaFraction(pose.position.x, pose.position.z);

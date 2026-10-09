@@ -11,6 +11,9 @@ const c = (hex: number) => {
 
 /** World scales (m) of the noise layers. Vegetation placement reads the same layers. */
 export const FOREST_SCALE = 900;
+/** forestMask = smoothstep(FOREST_LO, FOREST_HI, noise): where forests stand (vegetation.ts agrees). */
+export const FOREST_LO = 0.47;
+export const FOREST_HI = 0.64;
 export const PATCH_SCALE = 380;
 
 export const terrainUniforms = {
@@ -23,7 +26,7 @@ uniform sampler2D noiseTex;
 
 float forestMask( vec2 xz ) {
   float f = texture( noiseTex, xz / ${FOREST_SCALE.toFixed(1)} ).g;
-  return smoothstep( 0.55, 0.72, f );
+  return smoothstep( ${FOREST_LO.toFixed(3)}, ${FOREST_HI.toFixed(3)}, f );
 }
 
 vec3 terrainAlbedo( vec3 p, vec3 n ) {
@@ -38,7 +41,11 @@ vec3 terrainAlbedo( vec3 p, vec3 n ) {
   vec3 grass = mix( ${c(LANDSCAPE.grassDeep)}, ${c(LANDSCAPE.grassLush)}, smoothstep( 0.25, 0.75, patchN ) );
   grass = mix( grass, ${c(LANDSCAPE.grassSun)}, smoothstep( 0.55, 0.9, macro ) * 0.75 );
   grass = mix( grass, ${c(LANDSCAPE.grassDry)}, smoothstep( 0.6, 0.95, macro * 0.5 + fine * 0.5 ) * smoothstep( 60.0, 220.0, h ) * 0.55 );
-  grass = mix( grass, ${c(LANDSCAPE.forestFloor)}, forestMask( p.xz ) * 0.55 );
+  // Forests: from afar the canopy reads as a mottled carpet of dark and sunlit greens; the 3D
+  // trees standing on it add the volume up close.
+  float canopyN = texture( noiseTex, p.xz / 13.0 ).a * 0.6 + texture( noiseTex, p.xz / 41.0 ).b * 0.4;
+  vec3 canopy = mix( ${c(LANDSCAPE.forestFloor)}, ${c(LANDSCAPE.grassDeep)} * 1.15, smoothstep( 0.35, 0.75, canopyN ) );
+  grass = mix( grass, canopy, forestMask( p.xz ) * 0.85 * ( 1.0 - smoothstep( 300.0, 470.0, h ) * 0.6 ) );
   grass = mix( grass, ${c(LANDSCAPE.alpine)}, smoothstep( 330.0, 470.0, h + patchN * 70.0 ) );
 
   // Cliffs: pale stone with horizontal strata, darker on the steepest faces.

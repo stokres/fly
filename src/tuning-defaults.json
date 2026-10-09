@@ -143,6 +143,20 @@
     "speedBlur": 1,
     "pixelRatioMax": 1.5
   },
+  "vegetation": {
+    "density": 1,
+    "lod0Distance": 280,
+    "lod1Distance": 1000,
+    "drawDistance": 3200
+  },
+  "grass": {
+    "density": 1,
+    "radius": 110,
+    "height": 1,
+    "wind": 1,
+    "wake": 1,
+    "maxCameraHeight": 140
+  },
   "world": {
     "seed": 1337,
     "fogDensity": 0.0002
