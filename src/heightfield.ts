@@ -44,8 +44,8 @@ export class Heightfield {
   private readonly ridgeNoise: Noise2;
   private readonly detail: number;
   /** Fine-grid heights per chunk, filled lazily; shared by meshing and surface(). */
-  private readonly cache = new Map<string, Float32Array>();
-  private readonly landCache = new Map<string, boolean>();
+  private readonly cache = new Map<number, Float32Array>();
+  private readonly landCache = new Map<number, boolean>();
 
   constructor(options: HeightfieldOptions) {
     const rand = seeded(options.seed, 'terrain');
@@ -71,18 +71,30 @@ export class Heightfield {
     const wx = x + this.warpX(x * WARP_FREQ, z * WARP_FREQ) * WARP_AMP;
     const wz = z + this.warpZ(x * WARP_FREQ + 31.7, z * WARP_FREQ - 12.3) * WARP_AMP;
     let h = SEA_FLOOR;
+    let cliff = 0;
     for (const island of islands) {
       const dx = x - island.x;
       const dz = z - island.z;
       if (dx * dx + dz * dz > island.reach * island.reach) continue;
-      h = Math.max(h, this.islandHeight(island, wx, wz));
+      const ih = this.islandHeight(island, wx, wz);
+      if (ih > h) {
+        h = ih;
+        cliff = island.cliff ?? 0;
+      }
+    }
+    // Coastal cliffs: land just above sea level jumps up by `cliff` meters within a few meters
+    // of height, so the coast rises in a wall. Noise along the coast leaves some coves and beaches.
+    if (cliff > 0 && h > 0) {
+      const along = 0.5 + 0.5 * this.detailNoise(x / 650 + 17.1, z / 650 - 3.7);
+      const amount = cliff * MathUtils.smoothstep(along, 0.3, 0.6);
+      h += amount * MathUtils.smoothstep(h, 0.6, 7);
     }
     return h;
   }
 
   /** Fine-grid heights for a chunk ((FINE_SEGMENTS+1)² values, row-major in z then x). */
   chunkHeights(cx: number, cz: number): Float32Array {
-    const key = `${cx},${cz}`;
+    const key = chunkKey(cx, cz);
     let heights = this.cache.get(key);
     if (heights) return heights;
     const x0 = cx * CHUNK_SIZE;
@@ -115,18 +127,19 @@ export class Heightfield {
     const iz = Math.floor(gz);
     const fx = gx - ix;
     const fz = gz - iz;
-    const h00 = this.gridHeight(ix, iz);
-    const h11 = this.gridHeight(ix + 1, iz + 1);
+    const h00 = this.fineHeight(ix, iz);
+    const h11 = this.fineHeight(ix + 1, iz + 1);
     // Triangles split along the (0,0)-(1,1) diagonal, matching terrain.ts.
     if (fx > fz) {
-      const h10 = this.gridHeight(ix + 1, iz);
+      const h10 = this.fineHeight(ix + 1, iz);
       return h00 + (h10 - h00) * fx + (h11 - h10) * fz;
     }
-    const h01 = this.gridHeight(ix, iz + 1);
+    const h01 = this.fineHeight(ix, iz + 1);
     return h00 + (h11 - h01) * fx + (h01 - h00) * fz;
   }
 
-  private gridHeight(ix: number, iz: number): number {
+  /** Height at a fine-grid vertex (global grid indices, spacing CELL). */
+  fineHeight(ix: number, iz: number): number {
     const cx = Math.floor(ix / FINE_SEGMENTS);
     const cz = Math.floor(iz / FINE_SEGMENTS);
     if (!this.chunkHasLandCached(cx, cz)) return SEA_FLOOR;
@@ -135,7 +148,7 @@ export class Heightfield {
   }
 
   private chunkHasLandCached(cx: number, cz: number): boolean {
-    const key = `${cx},${cz}`;
+    const key = chunkKey(cx, cz);
     let land = this.landCache.get(key);
     if (land === undefined) {
       land = this.chunkHasLand(cx, cz);
@@ -201,6 +214,10 @@ export class Heightfield {
     }
     return SEA_FLOOR + (H - SEA_FLOOR) * f + extra;
   }
+}
+
+function chunkKey(cx: number, cz: number): number {
+  return (cx + 4096) * 8192 + (cz + 4096);
 }
 
 function fillerIslets(rand: () => number, count: number): Island[] {

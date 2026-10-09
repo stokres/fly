@@ -4,6 +4,7 @@
 import { BackSide, Color, Mesh, ShaderMaterial, SphereGeometry, type Vector3 } from 'three';
 import type { AtmosphereState } from './atmosphere';
 import { fogUniforms } from './fog';
+import { noiseTexture } from './textures';
 import { tuning } from './tuning';
 
 const RADIUS = 10000;
@@ -28,12 +29,22 @@ uniform float sunDiscCos;
 uniform float night;
 uniform vec3 veilColor;
 uniform float veil;
+uniform sampler2D noiseTex;
+uniform float skyTime;
+uniform vec3 wispColor;
 varying vec3 vDir;
 
 void main() {
   vec3 dir = normalize( vDir );
   float up = max( dir.y, 0.0 );
-  vec3 col = mix( horizon, zenith, pow( up, 0.55 ) );
+  // Deep blue overhead, a wide pale band near the horizon (Ghibli skies are bright at the rim).
+  vec3 col = mix( horizon, zenith, smoothstep( 0.0, 1.0, pow( up, 0.45 ) ) );
+  // High wisps: noise projected onto a far sky plane, drifting with the wind, fading at the horizon.
+  vec2 wuv = dir.xz / ( dir.y + 0.12 ) * 0.35 + vec2( skyTime * 0.0015, skyTime * 0.0006 );
+  float w1 = texture2D( noiseTex, wuv * vec2( 0.6, 1.6 ) ).g;
+  float w2 = texture2D( noiseTex, wuv * 3.1 + 0.37 ).a;
+  float wisp = smoothstep( 0.58, 0.85, w1 * 0.75 + w2 * 0.35 ) * smoothstep( 0.02, 0.22, dir.y );
+  col = mix( col, wispColor, wisp * 0.55 );
   // Same sun tint as the fog at the horizon.
   float s = max( dot( dir, fogSunDir ), 0.0 );
   col = mix( col, fogSunColor, pow( s, fogParams.y ) * fogParams.x );
@@ -63,6 +74,9 @@ export class Sky {
     night: { value: 0 },
     veilColor: { value: new Color() },
     veil: { value: 0 },
+    noiseTex: { value: noiseTexture },
+    skyTime: { value: 0 },
+    wispColor: { value: new Color() },
     ...fogUniforms,
   };
 
@@ -80,7 +94,10 @@ export class Sky {
   }
 
   /** `veil` (0..1) fades the whole sky to `veilColor`, e.g. inside a cloud. */
-  update(state: AtmosphereState, camera: Vector3, veil: number, veilColor: Color): void {
+  update(dt: number, state: AtmosphereState, camera: Vector3, veil: number, veilColor: Color): void {
+    this.uniforms.skyTime.value += dt;
+    // Wisps: lit like thin cloud, between the horizon color and the sunlight.
+    this.uniforms.wispColor.value.copy(state.horizon).lerp(state.light, 0.35).multiplyScalar(1.1);
     this.uniforms.veil.value = veil;
     this.uniforms.veilColor.value.copy(veilColor);
     this.mesh.position.copy(camera);

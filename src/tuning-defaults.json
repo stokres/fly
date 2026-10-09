@@ -89,13 +89,13 @@
     "drawDistance": 5500
   },
   "atmosphere": {
-    "timeOfDay": 17,
+    "timeOfDay": 16,
     "dayCycleMinutes": 0,
     "sunMaxElevationDeg": 60,
     "sunDiscDeg": 2.2,
-    "sunGlowAmount": 0.6,
+    "sunGlowAmount": 0.35,
     "sunGlowPower": 8,
-    "fogHeightScale": 500
+    "fogHeightScale": 650
   },
   "clouds": {
     "altitude": 480,
@@ -104,7 +104,7 @@
     "softness": 0.12,
     "scale": 3500,
     "windSpeed": 3,
-    "opacity": 0.92,
+    "opacity": 0.6,
     "insideFogDensity": 0.02
   },
   "audio": {
@@ -123,10 +123,29 @@
     "birdsVolume": 0.5,
     "birdHearing": 350
   },
+  "shading": {
+    "rampStart": -0.05,
+    "rampEnd": 0.32,
+    "rimStrength": 0.35,
+    "rimPower": 3
+  },
+  "water": {
+    "ripple": 1,
+    "foam": 1,
+    "glint": 1
+  },
+  "post": {
+    "bloomStrength": 0.25,
+    "bloomThreshold": 1.1,
+    "saturation": 1.15,
+    "contrast": 1.05,
+    "vignette": 0.35,
+    "speedBlur": 1,
+    "pixelRatioMax": 1.5
+  },
   "world": {
     "seed": 1337,
-    "fogDensity": 0.0007,
-    "waterOpacity": 0.78
+    "fogDensity": 0.0002
   },
   "input": {
     "invertPitch": false,

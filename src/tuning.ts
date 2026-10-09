@@ -136,10 +136,29 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     birdsVolume: [0, 2, 0.01],
     birdHearing: [50, 2000, 10],
   },
+  shading: {
+    rampStart: [-1, 0.5, 0.01],
+    rampEnd: [-0.5, 1, 0.01],
+    rimStrength: [0, 2, 0.01],
+    rimPower: [0.5, 8, 0.1],
+  },
+  water: {
+    ripple: [0, 3, 0.01],
+    foam: [0, 2, 0.01],
+    glint: [0, 3, 0.01],
+  },
+  post: {
+    bloomStrength: [0, 2, 0.01],
+    bloomThreshold: [0, 2, 0.01],
+    saturation: [0, 2, 0.01],
+    contrast: [0.5, 1.5, 0.01],
+    vignette: [0, 1, 0.01],
+    speedBlur: [0, 3, 0.01],
+    pixelRatioMax: [0.5, 2, 0.25],
+  },
   world: {
     seed: [1, 99999, 1],
     fogDensity: [0, 0.01, 0.0001],
-    waterOpacity: [0, 1, 0.01],
   },
   input: {
     gamepadDeadzone: [0, 0.5, 0.01],

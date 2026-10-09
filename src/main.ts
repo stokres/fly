@@ -1,6 +1,7 @@
 // Bootstrap and game loop. Flight runs on a fixed timestep; rendering interpolates between steps.
 import { fogUniforms } from './fog'; // also patches three's fog shaders: must load before anything renders
-import { ACESFilmicToneMapping, Color, Vector3, WebGLRenderer } from 'three';
+import { shadingUniforms } from './shading'; // patches three's Lambert lighting: same rule
+import { ACESFilmicToneMapping, Color, Object3D, PCFShadowMap, Vector3, WebGLRenderer } from 'three';
 import { Atmosphere } from './atmosphere';
 import { type AudioInput, GameAudio } from './audio';
 import { FollowCamera } from './camera';
@@ -11,27 +12,39 @@ import { Heightfield } from './heightfield';
 import { Input } from './input';
 import { Landmarks } from './landmarks';
 import { Sky } from './sky';
+import { Post } from './post';
 import { Terrain } from './terrain';
+import { TerrainMaps } from './terrainMaps';
 import { Thermals } from './thermals';
 import { createTuningPanel, onTuningChange, tuning } from './tuning';
+import { Water } from './water';
 import { World } from './world';
 
 const FIXED_DT = 1 / 120;
 const MAX_FRAME = 0.1; // clamp long frames (tab switch, breakpoint) to avoid a spiral
 const TERRAIN_BUDGET_MS = 3; // mesh building per frame once running
 
-const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Post-processing does the antialiasing (MSAA target), so the canvas itself doesn't need it.
+const renderer = new WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+const pixelRatio = () => Math.min(window.devicePixelRatio, tuning.post.pixelRatioMax);
+renderer.setPixelRatio(pixelRatio());
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = ACESFilmicToneMapping;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = PCFShadowMap; // soft with shadow.radius (PCFSoft is deprecated in r184)
 document.body.appendChild(renderer.domElement);
 
-const makeHeightfield = () =>
-  new Heightfield({ seed: tuning.world.seed, detail: tuning.terrain.detail, fillerIslets: tuning.terrain.fillerIslets });
+const heightfieldOptions = () => ({
+  seed: tuning.world.seed,
+  detail: tuning.terrain.detail,
+  fillerIslets: tuning.terrain.fillerIslets,
+});
 
-let heightfield = makeHeightfield();
+let heightfield = new Heightfield(heightfieldOptions());
+const maps = new TerrainMaps(heightfieldOptions());
 const world = new World();
-const terrain = new Terrain(heightfield);
+const terrain = new Terrain(heightfield, maps);
+const water = new Water(maps);
 const landmarks = new Landmarks(heightfield);
 const thermals = new Thermals();
 thermals.rebuild(heightfield);
@@ -42,7 +55,12 @@ const input = new Input();
 const atmosphere = new Atmosphere();
 const sky = new Sky();
 const clouds = new Clouds();
-world.scene.add(sky.mesh, terrain.group, landmarks.mesh, thermals.group, creature.object, ...clouds.slices);
+world.scene.add(sky.mesh, water.mesh, terrain.group, landmarks.mesh, thermals.group, creature.object, ...clouds.slices);
+const castShadows = (o: Object3D) => o.traverse((c) => (c.castShadow = c.receiveShadow = true));
+castShadows(creature.object);
+castShadows(landmarks.mesh);
+const post = new Post(renderer, world.scene, follow.camera);
+post.setSize(window.innerWidth, window.innerHeight, pixelRatio());
 let inCloud = 0;
 const audio = new GameAudio();
 // Browsers only allow sound after a gesture: start (or resume) on the first key or click.
@@ -76,13 +94,14 @@ let guiVisible = true;
 
 // Values read every frame need nothing here; these need a rebuild or a push into a material.
 onTuningChange((group, key) => {
-  if (group === 'world' && key === 'waterOpacity') world.setWaterOpacity(tuning.world.waterOpacity);
+  if (group === 'post' && key === 'pixelRatioMax') resize();
   if (group === 'landmarks' && key === 'fogScale') landmarks.setFogScale(tuning.landmarks.fogScale);
 
   const reshape =
     (group === 'world' && key === 'seed') || (group === 'terrain' && ['detail', 'fillerIslets'].includes(key));
   if (reshape) {
-    heightfield = makeHeightfield();
+    heightfield = new Heightfield(heightfieldOptions());
+    maps.rebake(heightfieldOptions());
     terrain.setHeightfield(heightfield);
     landmarks.rebuild(heightfield);
   }
@@ -112,10 +131,13 @@ function reset(): void {
 reset();
 
 window.addEventListener('hashchange', reset);
-window.addEventListener('resize', () => {
+function resize(): void {
+  renderer.setPixelRatio(pixelRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
+  post.setSize(window.innerWidth, window.innerHeight, pixelRatio());
   follow.setAspect(window.innerWidth / window.innerHeight);
-});
+}
+window.addEventListener('resize', resize);
 
 let accumulator = 0;
 let last = performance.now();
@@ -154,14 +176,18 @@ function frame(now: number): void {
   drive.flapCount = flight.flapCount;
   creature.update(dt, pose, drive);
   follow.update(dt, pose, velocity, flight.speed, groundAt);
-  world.update(pose.position);
   atmosphere.update(dt);
+  world.update(pose.position, atmosphere.state.lightDir);
+  water.update(dt, pose.position, atmosphere.state);
+  maps.update(dt, atmosphere.state.sunDir);
+  const sh = tuning.shading;
+  shadingUniforms.toonParams.value.set([sh.rampStart, sh.rampEnd, sh.rimStrength, sh.rimPower]);
   const camPos = follow.camera.position;
   clouds.update(dt, camPos, atmosphere.state);
   inCloud += (clouds.densityAt(camPos) - inCloud) * (1 - Math.exp(-6 * dt));
   world.applyAtmosphere(atmosphere.state, inCloud, clouds.color);
   fogUniforms.fogParams.value[0] *= 1 - inCloud; // no sun tint inside a cloud: an even whiteout
-  sky.update(atmosphere.state, camPos, inCloud, clouds.color);
+  sky.update(dt, atmosphere.state, camPos, inCloud, clouds.color);
   const st = atmosphere.state;
   thermals.setLight(markerLight.copy(st.ambientSky).multiplyScalar(Math.min(1, st.ambientIntensity * 0.75)));
   creature.setRimColor(rimColor.copy(atmosphere.state.horizon).lerp(atmosphere.state.sun, 0.5));
@@ -182,7 +208,7 @@ function frame(now: number): void {
     audio.update(dt, audioInput, follow.camera);
   }
   thermals.update(dt);
-  renderer.render(world.scene, follow.camera);
+  post.render(dt, Math.max(0, Math.min(1, (flight.speed - 45) / 40)));
   input.endFrame();
 
   fpsFrames++;

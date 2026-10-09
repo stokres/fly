@@ -28,6 +28,8 @@ export interface Island {
   angle: number;
   /** Peak height above sea level. */
   height: number;
+  /** Height of coastal cliffs (m); 0 or absent keeps beaches all round. */
+  cliff?: number;
 }
 
 export interface LandmarkPlacement {
@@ -48,14 +50,14 @@ export const WORLD_HALF_SIZE = 5000;
 
 export const ISLANDS: Island[] = [
   { name: 'Harbor', shape: 'hill', x: 0, z: 2500, rx: 750, rz: 480, angle: 0.15, height: 70 },
-  { name: 'The Peak', shape: 'volcano', x: -1900, z: 300, rx: 1350, rz: 1250, angle: 0, height: 680 },
-  { name: 'Long Ridge', shape: 'ridge', x: 1900, z: -200, rx: 2300, rz: 480, angle: 1.1, height: 330 },
-  { name: 'Caldera', shape: 'caldera', x: -300, z: -2500, rx: 950, rz: 900, angle: 0, height: 160 },
+  { name: 'The Peak', shape: 'volcano', x: -1900, z: 300, rx: 1350, rz: 1250, angle: 0, height: 680, cliff: 45 },
+  { name: 'Long Ridge', shape: 'ridge', x: 1900, z: -200, rx: 2300, rz: 480, angle: 1.1, height: 330, cliff: 70 },
+  { name: 'Caldera', shape: 'caldera', x: -300, z: -2500, rx: 950, rz: 900, angle: 0, height: 160, cliff: 30 },
   { name: 'Mesa', shape: 'mesa', x: 2600, z: -2800, rx: 720, rz: 640, angle: 0.6, height: 230 },
-  { name: 'Needle', shape: 'hill', x: -3000, z: -2100, rx: 330, rz: 260, angle: 0.4, height: 90 },
+  { name: 'Needle', shape: 'hill', x: -3000, z: -2100, rx: 330, rz: 260, angle: 0.4, height: 90, cliff: 35 },
   { name: 'Needle South', shape: 'hill', x: -2650, z: -1650, rx: 200, rz: 170, angle: 1.2, height: 45 },
   { name: 'Needle West', shape: 'hill', x: -3450, z: -1750, rx: 230, rz: 150, angle: 2.1, height: 55 },
-  { name: 'Saddle', shape: 'hill', x: 700, z: 1100, rx: 520, rz: 300, angle: -0.5, height: 120 },
+  { name: 'Saddle', shape: 'hill', x: 700, z: 1100, rx: 520, rz: 300, angle: -0.5, height: 120, cliff: 40 },
 ];
 
 export const LANDMARKS: LandmarkPlacement[] = [
