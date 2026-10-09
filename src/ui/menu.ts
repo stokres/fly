@@ -137,7 +137,10 @@ export class Menu {
             s.lang = v as Lang;
             setLang(v as Lang);
           } else if (name === 'invert') s.invert = v === '1';
-          else if (name === 'quality') s.quality = v as Quality;
+          else if (name === 'quality') {
+            s.quality = v as Quality;
+            s.qualityLocked = true;
+          }
           this.cb.onSettingsChanged();
           this.render();
         }),

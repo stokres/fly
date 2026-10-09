@@ -92,6 +92,7 @@ export class Collectibles {
   private readonly q = new Quaternion();
   private readonly s = new Vector3();
   private readonly p = new Vector3();
+  private readonly camera = new Vector3();
 
   constructor(hf: Heightfield) {
     // Motes along each trail: points interpolated along the authored polyline, kept above ground.
@@ -126,11 +127,11 @@ export class Collectibles {
       this.trailState.push({ remaining: count, collectedInRow: 0, respawn: 0, total: count });
     });
 
-    const orb = new IcosahedronGeometry(1.1, 2);
+    const orb = new IcosahedronGeometry(1.1, 1);
     // HDR gold, so bloom gives the motes a glow.
     this.moteMesh = new InstancedMesh(orb, new MeshBasicMaterial({ color: new Color(2.4, 1.6, 0.55) }), this.motes.length);
     this.haloMesh = new InstancedMesh(
-      new IcosahedronGeometry(2.6, 2),
+      new IcosahedronGeometry(2.6, 1),
       new MeshBasicMaterial({ color: 0xffb84d, transparent: true, opacity: 0.16, blending: AdditiveBlending, depthWrite: false }),
       this.motes.length,
     );
@@ -246,7 +247,8 @@ export class Collectibles {
   }
 
   /** Checks pickups along the segment the creature flew this frame; returns what happened. */
-  update(dt: number, from: Vector3, to: Vector3): CollectEvent[] {
+  update(dt: number, from: Vector3, to: Vector3, camera: Vector3): CollectEvent[] {
+    this.camera.copy(camera);
     this.time += dt;
     this.events.length = 0;
 
@@ -305,8 +307,9 @@ export class Collectibles {
   private draw(): void {
     let n = 0;
     const t = this.time;
+    const far2 = 1800 * 1800; // beyond this the fog has them anyway
     for (const m of this.motes) {
-      if (m.taken) continue;
+      if (m.taken || m.pos.distanceToSquared(this.camera) > far2) continue;
       const bob = Math.sin(t * 2 + m.pos.x * 0.05) * 0.6;
       const pulse = 1 + Math.sin(t * 4 + m.pos.z * 0.1) * 0.12;
       this.p.copy(m.pos).setY(m.pos.y + bob);

@@ -13,6 +13,7 @@ import {
   MathUtils,
   Matrix4,
   MeshLambertMaterial,
+  type PerspectiveCamera,
   Quaternion,
   Vector3,
 } from 'three';
@@ -58,6 +59,9 @@ export class Vegetation {
   private geometries: BufferGeometry[][] = []; // [species][lod]
   private meshes: InstancedMesh[][] = []; // [species][lod]
   private readonly lastRefresh = new Vector3(Infinity, 0, Infinity);
+  private readonly viewDir = new Vector3(0, 0, -1);
+  private readonly lastDir = new Vector3(0, 0, -1);
+  private halfFov = 1;
   private ready = false;
 
   constructor(
@@ -87,15 +91,26 @@ export class Vegetation {
     if (this.ready) this.place();
   }
 
-  update(dt: number, camera: Vector3): void {
+  update(dt: number, camera: PerspectiveCamera): void {
     this.time.value += dt;
     if (!this.ready) return;
-    const moved = Math.hypot(camera.x - this.lastRefresh.x, camera.z - this.lastRefresh.z);
-    if (moved > 35) this.refresh(camera);
+    const pos = camera.position;
+    camera.getWorldDirection(this.viewDir);
+    this.viewDir.y = 0;
+    this.viewDir.normalize();
+    const moved = Math.hypot(pos.x - this.lastRefresh.x, pos.z - this.lastRefresh.z);
+    // Re-bucket when the camera has moved or turned enough that the view cone no longer covers it.
+    if (moved > 35 || this.viewDir.dot(this.lastDir) < Math.cos(0.3)) {
+      this.lastDir.copy(this.viewDir);
+      // Horizontal half field of view.
+      this.halfFov = Math.atan(Math.tan((camera.fov * Math.PI) / 360) * camera.aspect);
+      this.refresh(pos);
+    }
   }
 
   /** Seeded placement over all land. */
   private place(): void {
+    const started = performance.now();
     const rand = seeded(tuning.world.seed, 'vegetation');
     const hf = this.heightfield;
     const lists: number[][] = SPECIES.map(() => []);
@@ -214,13 +229,17 @@ export class Vegetation {
       }),
     );
     this.lastRefresh.set(Infinity, 0, Infinity);
-    console.info('vegetation', SPECIES.map((sp, i) => `${sp.name}:${this.instances[i].count}`).join(' '));
+    const total = this.instances.reduce((n, i) => n + i.count, 0);
+    console.info(`vegetation: ${total} plants placed in ${Math.round(performance.now() - started)} ms`);
   }
 
   /** Re-buckets instances into LODs by distance from the camera. */
   private refresh(camera: Vector3): void {
     this.lastRefresh.copy(camera);
     const v = tuning.vegetation;
+    // Horizontal view cone with a generous margin (refreshes happen only every ~17° of turn).
+    const coneCos = Math.cos(Math.min(Math.PI, this.halfFov + 0.55));
+    const near2 = 70 * 70; // always keep what's close: it casts shadows into view
     const d0 = v.lod0Distance ** 2;
     const d1 = v.lod1Distance ** 2;
     const d2 = v.drawDistance ** 2;
@@ -235,6 +254,7 @@ export class Vegetation {
         const d = dx * dx + dz * dz;
         const lod = d < d0 ? 0 : d < d1 ? 1 : d < d2 ? 2 : -1;
         if (lod < 0) continue;
+        if (d > near2 && (dx * this.viewDir.x + dz * this.viewDir.z) / Math.sqrt(d) < coneCos) continue;
         arrays[lod].set(inst.matrices.subarray(i * 16, i * 16 + 16), counts[lod] * 16);
         colorArrays[lod].set(inst.colors.subarray(i * 3, i * 3 + 3), counts[lod] * 3);
         counts[lod]++;

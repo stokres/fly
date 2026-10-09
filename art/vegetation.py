@@ -19,7 +19,7 @@ BARK = lib.srgb("#6b5442")
 BARK_DARK = lib.srgb("#4a3a30")
 
 # Canopy LOD settings: metaball resolution, target faces, noise amplitude.
-CANOPY_LODS = [(0.3, 1400, 0.3), (0.8, 200, 0.15), (2.2, 40, 0.0)]
+CANOPY_LODS = [(0.3, 700, 0.3), (0.8, 160, 0.15), (2.2, 40, 0.0)]
 
 
 def clumps(balls, rnd, count, size):
@@ -101,7 +101,8 @@ def broadleaf(name, seed, height, spread, dark, light):
     trunk_pts = [(0, 0, -0.5), tuple(lean * 0.3 + Vector((0, 0, height * 0.25))), tuple(lean + Vector((0, 0, top - 0.5)))]
     for lod in range(3):
         parts = [canopy(balls, center, dark, light, seed, lod)]
-        parts.append(trunk_part(trunk_pts, [0.55, 0.42, 0.3], lod))
+        if lod < 2:  # far away the trunk is under a pixel
+            parts.append(trunk_part(trunk_pts, [0.55, 0.42, 0.3], lod))
         if lod == 0:
             # Two branches reaching into the crown.
             for k in range(2):
@@ -126,7 +127,8 @@ def cypress(name, seed, height):
     light = lib.srgb("#4f8d3e")
     for lod in range(3):
         parts = [canopy(balls, (0, 0, height * 0.45), dark, light, seed, lod, spherical=0.45)]
-        parts.append(trunk_part([(0, 0, -0.5), (0, 0, 2.2)], [0.35, 0.25], lod))
+        if lod < 2:
+            parts.append(trunk_part([(0, 0, -0.5), (0, 0, 2.2)], [0.35, 0.25], lod))
         finish(name, parts, lod, 3.0)
 
 
@@ -150,7 +152,8 @@ def umbrella_pine(name, seed, height):
     for lod in range(3):
         crown = [((b[0][0] + bend.x, b[0][1] + bend.y, b[0][2]),) + tuple(b[1:]) for b in balls]
         parts = [canopy(crown, (bend.x, bend.y, top), dark, light, seed, lod, spherical=0.55)]
-        parts.append(trunk_part(pts, [0.5, 0.36, 0.26], lod))
+        if lod < 2:
+            parts.append(trunk_part(pts, [0.5, 0.36, 0.26], lod))
         finish(name, parts, lod, 5.0)
 
 

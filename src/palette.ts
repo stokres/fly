@@ -1,4 +1,5 @@
-// The whole game draws from this limited palette. Add a color only with a reason.
+// The game's colors: a limited palette, the terrain/water ramps and the time-of-day keys.
+// Add a color only with a reason. Blender assets carry their own colors (art/*.py), chosen to match.
 export const PALETTE = {
   sky: 0x8fc4ea,
   skyLight: 0xe4f3ff,
@@ -39,9 +40,6 @@ export const LANDSCAPE = {
   waterAbyss: 0x0f4e86,
   foam: 0xffffff,
 } as const;
-
-/** Colors used for scattered props and landmarks. */
-export const PROP_COLORS = [PALETTE.sand, PALETTE.terracotta, PALETTE.sage, PALETTE.bone, PALETTE.moss];
 
 /**
  * Sky and light colors across the day, keyed by sun elevation (sine of the sun's height:

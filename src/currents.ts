@@ -127,7 +127,7 @@ export class Currents {
           s: rand() * (c.count - 1),
           angle: rand() * Math.PI * 2,
           radius: 0.25 + rand() * 0.75,
-          len: 2 + rand() * 3,
+          len: 3 + rand() * 4,
           spin: (rand() < 0.5 ? -1 : 1) * (0.4 + rand() * 0.6),
           speed: 0.7 + rand() * 0.5,
         });
@@ -190,13 +190,14 @@ export class Currents {
         this.up.subVectors(camera, this.tmp);
         const camDist = this.up.length();
         this.side.fromArray(c.tan, Math.floor(s) * 3).cross(this.up).normalize();
-        const w = (0.3 * Math.sin(Math.PI * t) + 0.05) * Math.max(1, camDist / 45);
+        const w = (0.3 * Math.sin(Math.PI * t) + 0.05) * Math.min(5, Math.max(1, Math.pow(camDist / 60, 0.6)));
         const near = smooth((camDist - 14) / 40);
         pos.setXYZ(v, this.tmp.x + this.side.x * w, this.tmp.y + this.side.y * w, this.tmp.z + this.side.z * w);
         pos.setXYZ(v + 1, this.tmp.x - this.side.x * w, this.tmp.y - this.side.y * w, this.tmp.z - this.side.z * w);
         // Fade in at the start of the path and out at its end, so streaks appear and vanish softly.
         const ends = smooth(st.s / 8) * smooth((c.count - 1 - st.s) / 8);
-        const a = Math.sin(Math.PI * t) * 0.7 * fadeView * near * ends * tuning.currents.visibility;
+        const far = 1 - 0.5 * smooth((camDist - 300) / 600); // far streaks are hints, not shapes
+        const a = Math.sin(Math.PI * t) * 0.7 * fadeView * near * ends * far * tuning.currents.visibility;
         col.setXYZW(v, light.r, light.g, light.b, a);
         col.setXYZW(v + 1, light.r, light.g, light.b, a);
         v += 2;

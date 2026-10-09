@@ -159,7 +159,7 @@
   },
   "post": {
     "bloomStrength": 0.25,
-    "bloomThreshold": 1.1,
+    "bloomThreshold": 1.3,
     "saturation": 1.15,
     "contrast": 1.05,
     "vignette": 0.35,
@@ -168,8 +168,8 @@
   },
   "vegetation": {
     "density": 1,
-    "lod0Distance": 280,
-    "lod1Distance": 1000,
+    "lod0Distance": 170,
+    "lod1Distance": 650,
     "drawDistance": 3200
   },
   "grass": {

@@ -28,7 +28,7 @@ import { TerrainMaps } from './terrainMaps';
 import { Thermals } from './thermals';
 import { createTuningPanel, onTuningChange, tuning } from './tuning';
 import { Hud } from './ui/hud';
-import { setLang } from './ui/i18n';
+import { setLang, t } from './ui/i18n';
 import { Menu } from './ui/menu';
 import { type Quality, loadSave, writeSave } from './ui/save';
 import { Vegetation } from './vegetation';
@@ -50,6 +50,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = PCFShadowMap; // soft with shadow.radius (PCFSoft is deprecated in r184)
+renderer.info.autoReset = false; // count the whole frame (shadows, scene, post), reset per frame
 document.body.prepend(renderer.domElement);
 
 const heightfieldOptions = () => ({
@@ -173,7 +174,7 @@ function applySettings(): void {
   const q: Record<Quality, { pr: number; grass: number; grassR: number; veg: number; shadows: boolean; bloom: number }> = {
     low: { pr: 0.75, grass: 0, grassR: 60, veg: 1600, shadows: false, bloom: 0 },
     medium: { pr: 1, grass: 0.55, grassR: 85, veg: 2400, shadows: true, bloom: 0.2 },
-    high: { pr: 1.5, grass: 1, grassR: 110, veg: 3200, shadows: true, bloom: 0.25 },
+    high: { pr: 1.5, grass: 1, grassR: 110, veg: 2800, shadows: true, bloom: 0.25 },
   };
   const p = q[s.quality];
   const grassChanged = tuning.grass.density !== p.grass || tuning.grass.radius !== p.grassR;
@@ -188,7 +189,7 @@ function applySettings(): void {
   writeSave(save);
 }
 
-const readouts = { x: 0, z: 0, sound: 0, speed: 0, altitude: 0, aboveGround: 0, lift: 0, sink: 0, energy: 0, fps: 0, cpuMs: 0 };
+const readouts = { x: 0, z: 0, calls: 0, ktris: 0, sound: 0, speed: 0, altitude: 0, aboveGround: 0, lift: 0, sink: 0, energy: 0, fps: 0, cpuMs: 0 };
 const gui = createTuningPanel(readouts);
 let guiVisible = false;
 gui.show(guiVisible);
@@ -277,12 +278,37 @@ window.addEventListener('blur', () => {
   }
 });
 
+// Debug hook for tooling (?debug in the URL): scene and renderer on window.
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { fly: { scene: world.scene, renderer, tuning } });
+
 applySettings();
 reset();
 if (startOverride()) {
   started = true;
   menu.close();
   hud.visible = true;
+}
+
+// Adaptive quality: if flight runs below ~40 fps for a while, step down one level (once per
+// level), unless the player picked a quality themselves.
+const QUALITY_ORDER: Quality[] = ['low', 'medium', 'high'];
+let slowTime = 0;
+let measuredTime = 0;
+function adaptQuality(realDt: number, playing: boolean): void {
+  if (!playing || save.settings.qualityLocked || realDt > 0.5) return; // ignore hitches and tab switches
+  measuredTime += realDt;
+  if (measuredTime < 4) return; // let shaders compile and the world stream in first
+  slowTime = realDt > 1 / 40 ? slowTime + realDt : Math.max(0, slowTime - realDt * 0.5);
+  if (slowTime > 3) {
+    const i = QUALITY_ORDER.indexOf(save.settings.quality);
+    if (i > 0) {
+      save.settings.quality = QUALITY_ORDER[i - 1];
+      applySettings();
+      hud.showHint(t('qualityLowered'));
+    }
+    slowTime = 0;
+    measuredTime = 0;
+  }
 }
 
 let accumulator = 0;
@@ -304,6 +330,7 @@ function frame(now: number): void {
   }
 
   const playing = started && !menu.open;
+  adaptQuality(realDt, playing);
   input.captureEnabled = playing || !menu.open;
   if (input.wasPressed('Escape') && started && performance.now() - autoPausedAt > 400) {
     if (menu.open) {
@@ -355,7 +382,7 @@ function frame(now: number): void {
   flight.velocity(velocity);
 
   // Pickups along the path flown this frame.
-  const events = collectibles.update(dt, lastPos, flight.position);
+  const events = collectibles.update(dt, lastPos, flight.position, follow.camera.position);
   if (playing) {
     progress.handle(events);
     progress.update(dt, { current: env.current, skim: flight.skim });
@@ -388,7 +415,7 @@ function frame(now: number): void {
   // With every feather found, the bird glows gold.
   creature.setRimColor(progress.allFound ? goldRim : rimColor);
   terrain.update(pose.position, TERRAIN_BUDGET_MS);
-  vegetation.update(dt, camPos);
+  vegetation.update(dt, follow.camera);
   props.update(dt, camPos, st);
   currents.update(dt, camPos, currentTint.copy(st.horizon).lerp(st.light, 0.3).multiplyScalar(1.15));
   const overWater = heightfield.surface(pose.position.x, pose.position.z) < 0.3;
@@ -432,7 +459,10 @@ function frame(now: number): void {
     audio.update(dt, audioInput, follow.camera);
   }
   thermals.update(dt);
+  renderer.info.reset();
   post.render(dt, Math.max(0, Math.min(1, (flight.speed - 60) / 50)) * 0.7 + flight.boost * 0.3);
+  readouts.calls = renderer.info.render.calls;
+  readouts.ktris = Math.round(renderer.info.render.triangles / 1000);
   input.endFrame();
 
   // FPS from real (unclamped) frame times, so slow machines show their true rate.

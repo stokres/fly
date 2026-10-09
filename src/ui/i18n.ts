@@ -35,6 +35,7 @@ const STRINGS = {
   hintCurrent: { es: 'Corriente de viento: déjate llevar', en: 'Wind current: let it carry you' },
   hintSkim: { es: 'Rozar el agua o la hierba recarga energía', en: 'Skimming water or grass refills energy' },
   hintBoost: { es: 'Mayús o clic derecho: impulso', en: 'Shift or right click: boost' },
+  qualityLowered: { es: 'Calidad gráfica ajustada para ir más fluido', en: 'Graphics quality lowered for smoother flight' },
   controlsList: {
     es: [
       ['Ratón', 'Dirigir (clic para capturar)'],
