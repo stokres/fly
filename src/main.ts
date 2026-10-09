@@ -10,7 +10,9 @@ import { Creature, type CreatureDrive } from './creature';
 import { Flight, type FlightEnvironment, type FlightPose } from './flight';
 import { Heightfield } from './heightfield';
 import { Input } from './input';
-import { Landmarks } from './landmarks';
+import { Obstacles } from './obstacles';
+import { clearingsOf, computePlacements } from './places';
+import { Props } from './props';
 import { Sky } from './sky';
 import { Post } from './post';
 import { Terrain } from './terrain';
@@ -18,8 +20,7 @@ import { TerrainMaps } from './terrainMaps';
 import { Thermals } from './thermals';
 import { createTuningPanel, onTuningChange, tuning } from './tuning';
 import { Grass } from './grass';
-import { type Clearing, Vegetation } from './vegetation';
-import { LANDMARKS } from './map';
+import { Vegetation } from './vegetation';
 import { Water } from './water';
 import { World } from './world';
 
@@ -48,9 +49,11 @@ const maps = new TerrainMaps(heightfieldOptions());
 const world = new World();
 const terrain = new Terrain(heightfield, maps);
 const water = new Water(maps);
-const vegetation = new Vegetation(heightfield, maps, landmarkClearings());
+const placements = computePlacements(heightfield, tuning.world.seed);
+const props = new Props(placements, maps);
+const obstacles = new Obstacles(placements);
+const vegetation = new Vegetation(heightfield, maps, clearingsOf(placements));
 const grass = new Grass(heightfield, maps);
-const landmarks = new Landmarks(heightfield);
 const thermals = new Thermals();
 thermals.rebuild(heightfield);
 const flight = new Flight();
@@ -60,10 +63,9 @@ const input = new Input();
 const atmosphere = new Atmosphere();
 const sky = new Sky();
 const clouds = new Clouds();
-world.scene.add(grass.mesh, vegetation.group, sky.mesh, water.mesh, terrain.group, landmarks.mesh, thermals.group, creature.object, clouds.group);
+world.scene.add(grass.mesh, vegetation.group, sky.mesh, water.mesh, terrain.group, props.group, thermals.group, creature.object, clouds.group);
 const castShadows = (o: Object3D) => o.traverse((c) => (c.castShadow = c.receiveShadow = true));
 castShadows(creature.object);
-castShadows(landmarks.mesh);
 const post = new Post(renderer, world.scene, follow.camera);
 post.setSize(window.innerWidth, window.innerHeight, pixelRatio());
 let inCloud = 0;
@@ -90,11 +92,6 @@ function seaFraction(x: number, z: number): number {
 const rimColor = new Color();
 const markerLight = new Color();
 
-/** Places where no vegetation grows: around landmarks. */
-function landmarkClearings(): Clearing[] {
-  return LANDMARKS.map((l) => [l.x, l.z, 140] as Clearing);
-}
-
 /** Terrain or sea surface, whichever is higher. */
 const groundAt = (x: number, z: number) => Math.max(0, heightfield.surface(x, z));
 
@@ -105,7 +102,6 @@ let guiVisible = true;
 // Values read every frame need nothing here; these need a rebuild or a push into a material.
 onTuningChange((group, key) => {
   if (group === 'post' && key === 'pixelRatioMax') resize();
-  if (group === 'landmarks' && key === 'fogScale') landmarks.setFogScale(tuning.landmarks.fogScale);
 
   const reshape =
     (group === 'world' && key === 'seed') || (group === 'terrain' && ['detail', 'fillerIslets'].includes(key));
@@ -115,7 +111,6 @@ onTuningChange((group, key) => {
     terrain.setHeightfield(heightfield);
     vegetation.setHeightfield(heightfield);
     grass.setHeightfield(heightfield);
-    landmarks.rebuild(heightfield);
   }
   const live = ['liftScale', 'moteSize', 'birdSize', 'columnOpacity'];
   if (reshape || (group === 'thermals' && !live.includes(key))) thermals.rebuild(heightfield);
@@ -177,6 +172,9 @@ function frame(now: number): void {
     env.groundSlopeX = (groundAt(x + 2, z) - groundAt(x - 2, z)) / 4;
     env.groundSlopeZ = (groundAt(x, z + 2) - groundAt(x, z - 2)) / 4;
     flight.step(FIXED_DT, intent, env);
+    // Rock and buildings are solid: get pushed out, losing speed in the scrape.
+    const hit = obstacles.resolve(flight.position, 1.6);
+    if (hit > 0) flight.speed *= Math.max(0.9, 1 - hit * 0.05);
     accumulator -= FIXED_DT;
   }
   flight.interpolate(accumulator / FIXED_DT, pose);
@@ -188,6 +186,7 @@ function frame(now: number): void {
   drive.flapCount = flight.flapCount;
   creature.update(dt, pose, drive);
   follow.update(dt, pose, velocity, flight.speed, groundAt);
+  obstacles.resolve(follow.camera.position, 2.5);
   atmosphere.update(dt);
   world.update(pose.position, atmosphere.state.lightDir);
   water.update(dt, pose.position, atmosphere.state);
@@ -205,6 +204,7 @@ function frame(now: number): void {
   creature.setRimColor(rimColor.copy(atmosphere.state.horizon).lerp(atmosphere.state.sun, 0.5));
   terrain.update(pose.position, TERRAIN_BUDGET_MS);
   vegetation.update(dt, camPos);
+  props.update(dt, camPos, atmosphere.state);
   grass.update(dt, camPos, pose.position, groundAt(camPos.x, camPos.z));
 
   if (audio.started) {

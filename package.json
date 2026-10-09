@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "assets": "blender -b --factory-startup -noaudio --python art/vegetation.py -- public/models/vegetation.glb && blender -b --factory-startup -noaudio --python art/clouds.py -- public/models/clouds.glb public/models/clouds.json"
+    "assets": "blender -b --factory-startup -noaudio --python art/vegetation.py -- public/models/vegetation.glb && blender -b --factory-startup -noaudio --python art/clouds.py -- public/models/clouds.glb public/models/clouds.json && blender -b --factory-startup -noaudio --python art/architecture.py -- public/models/architecture.glb public/models/architecture.json"
   },
   "dependencies": {
     "lil-gui": "0.21.0",

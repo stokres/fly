@@ -212,3 +212,118 @@ def srgb(hex_color):
 def mix(a, b, t):
     t = max(0.0, min(1.0, t))
     return tuple(x + (y - x) * t for x, y in zip(a, b))
+
+
+# ---------------------------------------------------------------------------------------------
+# Hard-surface helpers (architecture): flat-shaded parts, every face with its own vertices.
+
+
+def flat(polys, colors):
+    """Part from polygons (lists of points), one color per polygon, flat normals."""
+    verts, faces, normals, cols = [], [], [], []
+    for poly, c in zip(polys, colors):
+        pts = [Vector(p) for p in poly]
+        n = Vector((0, 0, 0))
+        for i in range(len(pts)):  # Newell's method: robust for any planar polygon
+            a, b = pts[i], pts[(i + 1) % len(pts)]
+            n.x += (a.y - b.y) * (a.z + b.z)
+            n.y += (a.z - b.z) * (a.x + b.x)
+            n.z += (a.x - b.x) * (a.y + b.y)
+        n = n.normalized() if n.length > 1e-9 else Vector((0, 0, 1))
+        base = len(verts)
+        verts += pts
+        normals += [n] * len(pts)
+        cols += [c] * len(pts)
+        faces.append(tuple(range(base, base + len(pts))))
+    return Part(verts, faces, normals, cols)
+
+
+def box(x0, y0, z0, x1, y1, z1, color, top=None, skip_bottom=True):
+    """Axis-aligned box; `top` overrides the color of the top face."""
+    p = [(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0), (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)]
+    faces = [
+        ((0, 1, 5, 4), color),  # front (-y)
+        ((1, 2, 6, 5), color),  # right (+x)
+        ((2, 3, 7, 6), color),  # back (+y)
+        ((3, 0, 4, 7), color),  # left (-x)
+        ((4, 5, 6, 7), top or color),  # top
+    ]
+    if not skip_bottom:
+        faces.append(((3, 2, 1, 0), color))
+    return flat([[p[i] for i in f] for f, _ in faces], [c for _, c in faces])
+
+
+def gable_roof(x0, y0, x1, y1, z0, h, over, roof, gable):
+    """Gable roof with the ridge along x, overhanging the walls by `over`."""
+    xa, xb, ya, yb = x0 - over, x1 + over, y0 - over, y1 + over
+    ym = (y0 + y1) / 2
+    zr = z0 + h
+    drop = h * over / ((y1 - y0) / 2)  # keep the slope through the overhang
+    polys = [
+        [(xa, ya, z0 - drop), (xb, ya, z0 - drop), (xb, ym, zr), (xa, ym, zr)],
+        [(xb, yb, z0 - drop), (xa, yb, z0 - drop), (xa, ym, zr), (xb, ym, zr)],
+        [(x0, y0, z0), (x0, ym, zr - 0.02), (x0, y1, z0)],
+        [(x1, y0, z0), (x1, ym, zr - 0.02), (x1, y1, z0)][::-1],
+        # underside of the eaves, darker
+        [(xa, ya, z0 - drop - 0.15), (xa, ym, zr - 0.15), (xb, ym, zr - 0.15), (xb, ya, z0 - drop - 0.15)],
+        [(xb, yb, z0 - drop - 0.15), (xb, ym, zr - 0.15), (xa, ym, zr - 0.15), (xa, yb, z0 - drop - 0.15)],
+    ]
+    shade = tuple(c * 0.55 for c in roof)
+    return flat(polys, [roof, roof, gable, gable, shade, shade])
+
+
+def hip_roof(x0, y0, x1, y1, z0, h, over, roof):
+    xa, xb, ya, yb = x0 - over, x1 + over, y0 - over, y1 + over
+    inset = min(x1 - x0, y1 - y0) / 2
+    xm0, xm1 = xa + inset + over, xb - inset - over
+    ym = (y0 + y1) / 2
+    zr = z0 + h
+    if xm1 < xm0:
+        xm0 = xm1 = (xa + xb) / 2
+    polys = [
+        [(xa, ya, z0), (xb, ya, z0), (xm1, ym, zr), (xm0, ym, zr)],
+        [(xb, yb, z0), (xa, yb, z0), (xm0, ym, zr), (xm1, ym, zr)],
+        [(xb, ya, z0), (xb, yb, z0), (xm1, ym, zr)],
+        [(xa, yb, z0), (xa, ya, z0), (xm0, ym, zr)],
+    ]
+    return flat(polys, [roof] * 4)
+
+
+def cylinder(cx, cy, z0, z1, r0, r1, segments, color_fn, cap=True):
+    """Flat-shaded (faceted) cylinder/cone; color_fn(z_mid) -> rgb for each band."""
+    polys, cols = [], []
+    for s in range(segments):
+        a0 = 2 * math.pi * s / segments
+        a1 = 2 * math.pi * (s + 1) / segments
+        p = [
+            (cx + math.cos(a0) * r0, cy + math.sin(a0) * r0, z0),
+            (cx + math.cos(a1) * r0, cy + math.sin(a1) * r0, z0),
+            (cx + math.cos(a1) * r1, cy + math.sin(a1) * r1, z1),
+            (cx + math.cos(a0) * r1, cy + math.sin(a0) * r1, z1),
+        ]
+        if r1 < 1e-4:
+            p = p[:3]
+        polys.append(p)
+        cols.append(color_fn((z0 + z1) / 2))
+    if cap and r1 > 1e-4:
+        polys.append([(cx + math.cos(2 * math.pi * s / segments) * r1, cy + math.sin(2 * math.pi * s / segments) * r1, z1) for s in range(segments)])
+        cols.append(color_fn(z1))
+    return flat(polys, cols)
+
+
+def banded_cylinder(cx, cy, z0, z1, r0, r1, segments, bands, color_fn):
+    """Cylinder split into horizontal bands (for stripes, AO and tapering)."""
+    parts = []
+    for i in range(bands):
+        za = z0 + (z1 - z0) * i / bands
+        zb = z0 + (z1 - z0) * (i + 1) / bands
+        ra = r0 + (r1 - r0) * i / bands
+        rb = r0 + (r1 - r0) * (i + 1) / bands
+        parts.append(cylinder(cx, cy, za, zb, ra, rb, segments, color_fn, cap=(i == bands - 1)))
+    return combine(parts)
+
+
+def transformed(part, matrix):
+    """Copy of a part transformed by a mathutils Matrix (4x4)."""
+    rot = matrix.to_3x3()
+    return Part([matrix @ v for v in part.verts], part.faces, [rot @ n for n in part.normals], part.colors)

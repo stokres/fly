@@ -16,7 +16,6 @@ import {
   Quaternion,
   Vector3,
 } from 'three';
-import { CLOUD_SHADOW_GLSL, cloudShadowUniforms } from './cloudShadows';
 import type { Heightfield } from './heightfield';
 import { WORLD_HALF_SIZE } from './map';
 import { loadGeometries } from './models';
@@ -25,6 +24,7 @@ import type { TerrainMaps } from './terrainMaps';
 import { FOREST_HI, FOREST_LO, FOREST_SCALE } from './terrainShading';
 import { noiseAt } from './textures';
 import { tuning } from './tuning';
+import { worldMaterial } from './worldMaterial';
 
 interface Species {
   name: string;
@@ -49,58 +49,6 @@ const LODS = 3;
 /** Circles where nothing may grow (landmarks, buildings): x, z, radius. */
 export type Clearing = [number, number, number];
 
-/** Material shared by all vegetation: vertex colors, wind sway, baked terrain light. */
-function vegetationMaterial(maps: TerrainMaps, time: { value: number }): MeshLambertMaterial {
-  const m = new MeshLambertMaterial({ vertexColors: true });
-  m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, maps.uniforms, cloudShadowUniforms, { vegTime: time });
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-        uniform float vegTime;
-        attribute float swayAmount;
-        varying vec2 vVegBase;`,
-      )
-      .replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-        vec3 vegBase = ( instanceMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
-        vVegBase = vegBase.xz;
-        // Sway grows with height up the plant; each plant has its own phase, gusts roll over.
-        float vegH = max( position.y, 0.0 ) / 12.0;
-        float phase = vegBase.x * 0.07 + vegBase.z * 0.05;
-        float gust = 0.6 + 0.4 * sin( vegTime * 0.35 + vegBase.x * 0.004 );
-        float bend = vegH * vegH * swayAmount * gust;
-        transformed.x += sin( vegTime * 1.3 + phase ) * bend;
-        transformed.z += cos( vegTime * 1.1 + phase * 1.3 ) * bend * 0.6;`,
-      );
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-        varying vec2 vVegBase;
-        uniform sampler2D terrainLightMap;
-        uniform float terrainMapExtent;
-        uniform float terrainMapsReady;
-        ${CLOUD_SHADOW_GLSL}`,
-      )
-      .replace(
-        '#include <lights_fragment_begin>',
-        `vec2 vegLight = mix( vec2( 1.0 ), texture2D( terrainLightMap, vVegBase / ( 2.0 * terrainMapExtent ) + 0.5 ).rg, terrainMapsReady );
-        stylizedDirect = vegLight.g * cloudShade( vVegBase );
-        #include <lights_fragment_begin>`,
-      )
-      .replace(
-        '#include <lights_fragment_end>',
-        `#include <lights_fragment_end>
-        reflectedLight.indirectDiffuse *= mix( 0.55, 1.0, vegLight.r );`,
-      );
-  };
-  m.customProgramCacheKey = () => 'vegetation';
-  return m;
-}
-
 export class Vegetation {
   readonly group = new Group();
   private readonly time = { value: 0 };
@@ -117,7 +65,7 @@ export class Vegetation {
     maps: TerrainMaps,
     private clearings: Clearing[],
   ) {
-    this.material = vegetationMaterial(maps, this.time);
+    this.material = worldMaterial(maps, { sway: { time: this.time } });
     loadGeometries('vegetation.glb').then((set) => {
       this.geometries = SPECIES.map((sp) => {
         const lods: BufferGeometry[] = [];
