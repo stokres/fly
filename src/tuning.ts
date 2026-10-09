@@ -38,6 +38,15 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     energyRegen: [0, 1, 0.01],
     groundClearance: [0, 10, 0.1],
     slideTurnRate: [0, 5, 0.05],
+    cruiseSpeed: [0, 80, 0.5],
+    cruiseThrust: [0, 30, 0.1],
+    boostAccel: [0, 120, 0.5],
+    boostMaxSpeed: [20, 200, 1],
+    boostCost: [0, 2, 0.01],
+    skimHeight: [1, 80, 0.5],
+    skimRegen: [0, 2, 0.01],
+    skimAccel: [0, 40, 0.1],
+    currentSteer: [0, 15, 0.1],
   },
   camera: {
     distance: [2, 30, 0.1],
@@ -59,6 +68,8 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     rollFactor: [0, 1, 0.01],
     rollResponse: [0.1, 15, 0.1],
     groundClearance: [0, 20, 0.1],
+    shake: [0, 4, 0.05],
+    boostFov: [0, 30, 0.5],
   },
   creature: {
     scale: [0.3, 3, 0.05],
@@ -91,6 +102,17 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     birdsPerThermal: [0, 12, 1],
     birdSize: [0.5, 8, 0.1],
     columnOpacity: [0, 0.5, 0.005],
+  },
+  currents: {
+    strength: [0, 2, 0.01],
+    speedScale: [0.2, 3, 0.01],
+    visibility: [0, 3, 0.01],
+    drawDistance: [200, 5000, 50],
+  },
+  fx: {
+    lines: [0, 2, 0.01],
+    linesSpeed: [0, 150, 1],
+    spray: [0, 3, 0.01],
   },
   landmarks: {
     fogScale: [0, 1, 0.01],
@@ -177,6 +199,8 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
   },
   input: {
     gamepadDeadzone: [0, 0.5, 0.01],
+    mouseSensitivity: [0.1, 5, 0.05],
+    mouseReturn: [0, 10, 0.1],
   },
 };
 

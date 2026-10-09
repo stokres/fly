@@ -8,6 +8,7 @@ import type { FlightPose } from './flight';
 import { tuning } from './tuning';
 
 const UP = new Vector3(0, 1, 0);
+const DEG = Math.PI / 180;
 
 /** Height of the ground (terrain or sea) at a point, so the camera never goes under it. */
 export type GroundQuery = (x: number, z: number) => number;
@@ -25,6 +26,10 @@ export class FollowCamera {
   private readonly desired = new Vector3();
   private readonly err = new Vector3();
   private readonly accel = new Vector3();
+  /** Camera velocity relative to the creature's: damping acts on this, so a steady flight has
+   *  no lag at any speed and only changes of speed pull the camera back or push it in. */
+  private readonly relVel = new Vector3();
+  private readonly targetVel = new Vector3();
   private readonly look = new Vector3();
 
   constructor(aspect: number) {
@@ -36,11 +41,15 @@ export class FollowCamera {
   snap(pose: FlightPose, velocity: Vector3, speed: number): void {
     this.computeDesired(pose, speed);
     this.camera.position.copy(this.desired);
-    this.vel.set(0, 0, 0);
+    this.vel.copy(velocity);
     this.roll = pose.bank * tuning.camera.rollFactor;
     this.fov = this.targetFov(speed);
     this.apply(pose, velocity);
   }
+
+  /** 0..1 extra intensity from boosting / riding a current (wider FOV, more shake). */
+  rush = 0;
+  private shakeTime = 0;
 
   update(dt: number, pose: FlightPose, velocity: Vector3, speed: number, groundAt: GroundQuery): void {
     const c = tuning.camera;
@@ -50,8 +59,10 @@ export class FollowCamera {
     // substeps keep stiff springs stable on long frames.
     const steps = Math.max(1, Math.ceil(dt * 120));
     const h = dt / steps;
+    this.targetVel.copy(velocity);
     for (let i = 0; i < steps; i++) {
       this.err.subVectors(this.desired, this.camera.position);
+      this.relVel.subVectors(this.vel, this.targetVel);
       this.accel.set(0, 0, 0);
       this.addAxis(this.right, c.lateralHz, c.lateralDamping);
       this.addAxis(this.up, c.verticalHz, c.verticalDamping);
@@ -69,8 +80,16 @@ export class FollowCamera {
     }
 
     this.roll = MathUtils.lerp(this.roll, pose.bank * c.rollFactor, 1 - Math.exp(-c.rollResponse * dt));
-    this.fov = MathUtils.lerp(this.fov, this.targetFov(speed), 1 - Math.exp(-c.fovResponse * dt));
+    this.fov = MathUtils.lerp(this.fov, this.targetFov(speed) + this.rush * c.boostFov, 1 - Math.exp(-c.fovResponse * dt));
     this.apply(pose, velocity);
+    // Speed shake: a fine tremble that grows with speed and rush, never at a cruise.
+    this.shakeTime += dt;
+    const amp = c.shake * (MathUtils.smoothstep(speed, 55, 110) * 0.5 + this.rush * 0.35) * DEG;
+    if (amp > 0) {
+      const t = this.shakeTime;
+      this.camera.rotateX((Math.sin(t * 37.1) + Math.sin(t * 23.7 + 1.3)) * amp);
+      this.camera.rotateY((Math.sin(t * 31.3 + 0.7) + Math.sin(t * 19.1 + 2.1)) * amp);
+    }
   }
 
   setAspect(aspect: number): void {
@@ -94,7 +113,7 @@ export class FollowCamera {
 
   private addAxis(axis: Vector3, hz: number, damping: number): void {
     const w = 2 * Math.PI * hz;
-    const a = w * w * this.err.dot(axis) - 2 * damping * w * this.vel.dot(axis);
+    const a = w * w * this.err.dot(axis) - 2 * damping * w * this.relVel.dot(axis);
     this.accel.addScaledVector(axis, a);
   }
 

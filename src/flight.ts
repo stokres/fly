@@ -1,8 +1,11 @@
-// Arcade flight model. Readable behavior over physical accuracy:
+// Arcade flight model. Readable, fast behavior over physical accuracy:
 //  - pitch trades altitude for speed (gravity along the path), drag grows with speed²
 //  - turning comes from bank; turn rate scales with lift (speed²), capped at cruise
 //  - below stall speed the nose drops and sink grows, which forces a dive to recover
 //  - flapping costs energy and has a cooldown, so gliding is the default state
+//  - a gentle cruise thrust keeps level flight from ever stalling out; diving adds speed beyond it
+//  - boost (hold) burns energy for a surge of speed; skimming close to ground or water refills it
+//  - wind currents grab the creature and fling it along their path
 //
 // Conventions: meters, seconds, radians. Forward is -Z. yaw > 0 turns left,
 // pitch > 0 is nose up, bank > 0 is right wing down.
@@ -22,6 +25,10 @@ export interface FlightEnvironment {
   /** Ground slope (dHeight/dx, dHeight/dz) below the creature. */
   groundSlopeX: number;
   groundSlopeZ: number;
+  /** Wind current: 0..1 how deep inside one, and its flow direction (unit) and speed. */
+  current: number;
+  currentDir: Vector3;
+  currentSpeed: number;
 }
 
 export interface FlightPose {
@@ -48,6 +55,10 @@ export class Flight {
   energy = 1;
   /** Increments on each flap; visuals can use it to trigger a wingbeat. */
   flapCount = 0;
+  /** 0..1 while boosting (eased), for visuals and audio. */
+  boost = 0;
+  /** 0..1 how close to the surface (skimming), for visuals, audio and energy. */
+  skim = 0;
 
   private pitchRate = 0;
   private flapTimer = 0;
@@ -118,6 +129,35 @@ export class Flight {
     // Speed: gravity along the flight path, quadratic drag.
     this.speed -= t.gravity * Math.sin(this.pitch) * dt;
     this.speed -= t.drag * this.speed * this.speed * dt;
+    // Cruise thrust: below cruise speed the creature works its way back up to it.
+    if (this.speed < t.cruiseSpeed) this.speed += Math.min(t.cruiseThrust * dt, t.cruiseSpeed - this.speed);
+
+    // Boost: a surge of speed while held, paid in energy.
+    const boosting = input.boost && this.energy > 0.02;
+    this.boost += ((boosting ? 1 : 0) - this.boost) * (1 - Math.exp(-6 * dt));
+    if (boosting) {
+      if (this.speed < t.boostMaxSpeed) this.speed += t.boostAccel * dt;
+      this.energy = Math.max(0, this.energy - t.boostCost * dt);
+    }
+
+    // Skimming: flying close over ground or water refills energy and adds a little speed.
+    const above = this.position.y - env.ground;
+    this.skim = Math.max(0, 1 - above / t.skimHeight) * Math.min(1, this.speed / t.cruiseSpeed);
+    this.energy = Math.min(1, this.energy + t.skimRegen * this.skim * dt);
+    this.speed += t.skimAccel * this.skim * dt;
+
+    // Wind currents: steer toward the flow and get carried at its speed.
+    if (env.current > 0) {
+      const k = env.current;
+      const flowYaw = Math.atan2(-env.currentDir.x, -env.currentDir.z);
+      let dy = flowYaw - this.yaw;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      this.yaw += dy * (1 - Math.exp(-t.currentSteer * k * dt));
+      const flowPitch = Math.asin(Math.max(-1, Math.min(1, env.currentDir.y)));
+      this.pitch += (flowPitch - this.pitch) * (1 - Math.exp(-t.currentSteer * 0.6 * k * dt));
+      if (this.speed < env.currentSpeed) this.speed += (env.currentSpeed - this.speed) * (1 - Math.exp(-2.5 * k * dt));
+      this.energy = Math.min(1, this.energy + 0.25 * k * dt);
+    }
 
     // Flap.
     this.flapTimer = Math.max(0, this.flapTimer - dt);
@@ -131,7 +171,7 @@ export class Flight {
       this.energy = Math.min(1, this.energy + t.energyRegen * dt);
     }
     this.climb *= Math.exp(-t.flapLiftDecay * dt);
-    this.speed = Math.min(t.maxSpeed, Math.max(0, this.speed));
+    this.speed = Math.min(Math.max(t.maxSpeed, env.currentSpeed * env.current), Math.max(0, this.speed));
 
     this.sink = t.baseSink + t.stallSink * stalled;
 

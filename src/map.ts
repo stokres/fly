@@ -136,3 +136,68 @@ export const THERMALS: { x: number; z: number }[] = [
   { x: 2350, z: -2450 },
   { x: -2800, z: -1850 },
 ];
+
+/**
+ * Wind currents: ribbons of fast air along these points (x, y, z). Flying in grabs the creature
+ * and carries it along at `speed`. Points are raised to clear the terrain automatically.
+ */
+export interface CurrentPath {
+  name: string;
+  points: [number, number, number][];
+  /** Flow speed, m/s. */
+  speed: number;
+  /** Capture radius, m. */
+  radius: number;
+}
+
+function helix(cx: number, cz: number, r0: number, r1: number, y0: number, y1: number, turns: number, start: number): [number, number, number][] {
+  const out: [number, number, number][] = [];
+  const n = Math.round(turns * 10);
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const a = start + t * turns * Math.PI * 2;
+    const r = r0 + (r1 - r0) * t;
+    out.push([cx + Math.cos(a) * r, y0 + (y1 - y0) * t, cz + Math.sin(a) * r]);
+  }
+  return out;
+}
+
+export const CURRENTS: CurrentPath[] = [
+  {
+    name: 'Harbor Run',
+    points: [[-40, 70, 3500], [60, 60, 3100], [70, 70, 2800], [-120, 90, 2400], [-60, 110, 1900], [420, 130, 1500], [650, 160, 1150], [900, 170, 650]],
+    speed: 78,
+    radius: 26,
+  },
+  {
+    name: 'Peak Spiral',
+    points: helix(-1900, 300, 1050, 220, 120, 760, 1.6, 1.2),
+    speed: 72,
+    radius: 30,
+  },
+  {
+    name: 'Ridge Line',
+    points: [[1180, 240, 1080], [1500, 330, 520], [1820, 380, -60], [2150, 380, -620], [2500, 340, -1180], [2700, 300, -1700], [2780, 300, -2300]],
+    speed: 85,
+    radius: 26,
+  },
+  {
+    name: 'Ring Gate',
+    // Straight through the floating ring over the caldera (axis along yaw 0.5).
+    points: [[-300 - 0.479 * 900, 150, -2500 - 0.878 * 900], [-300 - 0.479 * 300, 125, -2500 - 0.878 * 300], [-300, 115, -2500], [-300 + 0.479 * 300, 125, -2500 + 0.878 * 300], [-300 + 0.479 * 700, 170, -2500 + 0.878 * 700], [-1000, 200, -1200], [-1700, 160, -700]],
+    speed: 80,
+    radius: 24,
+  },
+  {
+    name: 'Needle Climb',
+    points: helix(-3000, -2100, 260, 70, 60, 270, 1.4, 0.5),
+    speed: 68,
+    radius: 26,
+  },
+  {
+    name: 'Sea Crossing',
+    points: [[2600, 260, -2600], [1800, 180, -2900], [800, 120, -3300], [-400, 90, -3500], [-1600, 110, -3300], [-2600, 140, -2700]],
+    speed: 90,
+    radius: 28,
+  },
+];

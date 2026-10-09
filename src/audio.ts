@@ -22,6 +22,12 @@ export interface AudioBus {
 
 export interface AudioInput extends SoundscapeInput {
   speed: number;
+  /** 0..1 boosting, inside a current, skimming the surface. */
+  boost: number;
+  current: number;
+  skim: number;
+  /** Skimming over water rather than land. */
+  overWater: boolean;
   bank: number;
   flapCount: number;
   /** 0..1 inside a cloud. */
@@ -75,6 +81,10 @@ export class GameAudio {
   private whistleFilter!: BiquadFilterNode;
   private whistleGain!: GainNode;
   private windPan!: StereoPannerNode;
+  private rushFilter!: BiquadFilterNode;
+  private rushGain!: GainNode;
+  private skimFilter!: BiquadFilterNode;
+  private skimGain!: GainNode;
   private gust = 0;
 
   private lastFlapCount = 0;
@@ -132,6 +142,20 @@ export class GameAudio {
     this.whistleGain.gain.value = 0;
     this.loop(this.bus.noise.white).connect(this.whistleFilter).connect(this.whistleGain).connect(this.windPan);
 
+    // Rush: a roaring band of noise for boosting and riding currents.
+    this.rushFilter = ctx.createBiquadFilter();
+    this.rushFilter.type = 'bandpass';
+    this.rushFilter.Q.value = 1.2;
+    this.rushGain = ctx.createGain();
+    this.rushGain.gain.value = 0;
+    this.loop(this.bus.noise.white).connect(this.rushFilter).connect(this.rushGain).connect(this.master);
+    // Skim: hiss of spray (water) or rustle (grass) right under the bird.
+    this.skimFilter = ctx.createBiquadFilter();
+    this.skimFilter.type = 'highpass';
+    this.skimGain = ctx.createGain();
+    this.skimGain.gain.value = 0;
+    this.loop(this.bus.noise.white).connect(this.skimFilter).connect(this.skimGain).connect(this.master);
+
     this.music = new Music(this.bus);
     this.soundscape = new Soundscape(this.bus);
 
@@ -172,6 +196,12 @@ export class GameAudio {
     glide(this.whistleFilter.frequency, 900 + 1800 * s);
     glide(this.whistleGain.gain, a.whistleVolume * MathUtils.smoothstep(s, 0.45, 1));
     glide(this.windPan.pan, MathUtils.clamp(input.bank * 0.5, -0.6, 0.6), 0.2);
+    const rush = Math.max(input.boost, input.current);
+    glide(this.rushGain.gain, a.windVolume * 0.5 * rush, 0.12);
+    glide(this.rushFilter.frequency, 380 + 900 * s + 300 * input.current, 0.2);
+    const flutter = 0.7 + 0.3 * Math.sin(now * 23) * Math.sin(now * 7.3);
+    glide(this.skimGain.gain, a.windVolume * 0.35 * input.skim * flutter, 0.05);
+    glide(this.skimFilter.frequency, input.overWater ? 2200 : 3800, 0.2);
 
     if (input.flapCount !== this.lastFlapCount) {
       this.lastFlapCount = input.flapCount;

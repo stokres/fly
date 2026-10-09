@@ -6,6 +6,7 @@ import { Atmosphere } from './atmosphere';
 import { type AudioInput, GameAudio } from './audio';
 import { FollowCamera } from './camera';
 import { Clouds } from './clouds';
+import { Currents } from './currents';
 import { Creature, type CreatureDrive } from './creature';
 import { Flight, type FlightEnvironment, type FlightPose } from './flight';
 import { Heightfield } from './heightfield';
@@ -15,6 +16,7 @@ import { clearingsOf, computePlacements } from './places';
 import { Props } from './props';
 import { Sky } from './sky';
 import { Post } from './post';
+import { SpeedFx } from './speedfx';
 import { Terrain } from './terrain';
 import { TerrainMaps } from './terrainMaps';
 import { Thermals } from './thermals';
@@ -59,11 +61,13 @@ thermals.rebuild(heightfield);
 const flight = new Flight();
 const creature = new Creature();
 const follow = new FollowCamera(window.innerWidth / window.innerHeight);
-const input = new Input();
+const input = new Input(renderer.domElement);
+const currents = new Currents(heightfield);
+const speedFx = new SpeedFx();
 const atmosphere = new Atmosphere();
 const sky = new Sky();
 const clouds = new Clouds();
-world.scene.add(grass.mesh, vegetation.group, sky.mesh, water.mesh, terrain.group, props.group, thermals.group, creature.object, clouds.group);
+world.scene.add(grass.mesh, vegetation.group, sky.mesh, water.mesh, terrain.group, props.group, thermals.group, creature.object, clouds.group, currents.mesh, speedFx.lines, speedFx.particles);
 const castShadows = (o: Object3D) => o.traverse((c) => (c.castShadow = c.receiveShadow = true));
 castShadows(creature.object);
 const post = new Post(renderer, world.scene, follow.camera);
@@ -76,7 +80,7 @@ window.addEventListener('keydown', startAudio);
 window.addEventListener('pointerdown', startAudio);
 const birdsAt = new Vector3();
 const audioInput: AudioInput = {
-  speed: 0, bank: 0, flapCount: 0, inCloud: 0, night: 0,
+  speed: 0, bank: 0, flapCount: 0, inCloud: 0, night: 0, boost: 0, current: 0, skim: 0, overWater: false,
   aboveGround: 0, coast: 0, sea: 0, birds: null, birdDistance: Infinity,
 };
 
@@ -91,6 +95,7 @@ function seaFraction(x: number, z: number): number {
 }
 const rimColor = new Color();
 const markerLight = new Color();
+const currentTint = new Color();
 
 /** Terrain or sea surface, whichever is higher. */
 const groundAt = (x: number, z: number) => Math.max(0, heightfield.surface(x, z));
@@ -119,7 +124,15 @@ onTuningChange((group, key) => {
 const pose: FlightPose = { position: new Vector3(), yaw: 0, pitch: 0, bank: 0 };
 const velocity = new Vector3();
 const drive: CreatureDrive = { speed: 0, pitchInput: 0, rollInput: 0, flapCount: 0 };
-const env: FlightEnvironment = { updraft: 0, ground: 0, groundSlopeX: 0, groundSlopeZ: 0 };
+const env: FlightEnvironment = {
+  updraft: 0,
+  ground: 0,
+  groundSlopeX: 0,
+  groundSlopeZ: 0,
+  current: 0,
+  currentDir: new Vector3(),
+  currentSpeed: 0,
+};
 
 /** Optional start override from the URL: `#x,y,z,headingDeg` (heading 0 = north, 90 = east). */
 function startOverride(): { x: number; y: number; z: number; yaw: number } | null {
@@ -163,7 +176,7 @@ function frame(now: number): void {
     gui.show(guiVisible);
   }
 
-  const intent = input.read();
+  const intent = input.read(dt);
   accumulator += dt;
   while (accumulator >= FIXED_DT) {
     env.updraft = thermals.liftAt(flight.position);
@@ -171,7 +184,12 @@ function frame(now: number): void {
     env.ground = groundAt(x, z);
     env.groundSlopeX = (groundAt(x + 2, z) - groundAt(x - 2, z)) / 4;
     env.groundSlopeZ = (groundAt(x, z + 2) - groundAt(x, z - 2)) / 4;
+    const cur = currents.sample(flight.position);
+    env.current = cur.strength;
+    env.currentDir.copy(cur.dir);
+    env.currentSpeed = cur.speed;
     flight.step(FIXED_DT, intent, env);
+    flight.position.addScaledVector(cur.pull, FIXED_DT);
     // Rock and buildings are solid: get pushed out, losing speed in the scrape.
     const hit = obstacles.resolve(flight.position, 1.6);
     if (hit > 0) flight.speed *= Math.max(0.9, 1 - hit * 0.05);
@@ -185,6 +203,7 @@ function frame(now: number): void {
   drive.rollInput = intent.roll;
   drive.flapCount = flight.flapCount;
   creature.update(dt, pose, drive);
+  follow.rush = Math.max(flight.boost, env.current);
   follow.update(dt, pose, velocity, flight.speed, groundAt);
   obstacles.resolve(follow.camera.position, 2.5);
   atmosphere.update(dt);
@@ -205,11 +224,26 @@ function frame(now: number): void {
   terrain.update(pose.position, TERRAIN_BUDGET_MS);
   vegetation.update(dt, camPos);
   props.update(dt, camPos, atmosphere.state);
+  currents.update(dt, camPos, currentTint.copy(atmosphere.state.horizon).lerp(atmosphere.state.light, 0.3).multiplyScalar(1.15));
+  speedFx.update(dt, follow.camera, {
+    speed: flight.speed,
+    boost: flight.boost,
+    current: env.current,
+    skim: flight.skim,
+    position: pose.position,
+    velocity,
+    ground: env.ground,
+    water: heightfield.surface(pose.position.x, pose.position.z) < 0.3,
+  });
   grass.update(dt, camPos, pose.position, groundAt(camPos.x, camPos.z));
 
   if (audio.started) {
     const sea = seaFraction(pose.position.x, pose.position.z);
     audioInput.speed = flight.speed;
+    audioInput.boost = flight.boost;
+    audioInput.current = env.current;
+    audioInput.skim = flight.skim;
+    audioInput.overWater = heightfield.surface(pose.position.x, pose.position.z) < 0.3;
     audioInput.bank = pose.bank;
     audioInput.flapCount = flight.flapCount;
     audioInput.inCloud = inCloud;
@@ -222,7 +256,7 @@ function frame(now: number): void {
     audio.update(dt, audioInput, follow.camera);
   }
   thermals.update(dt);
-  post.render(dt, Math.max(0, Math.min(1, (flight.speed - 45) / 40)));
+  post.render(dt, Math.max(0, Math.min(1, (flight.speed - 60) / 50)) * 0.7 + flight.boost * 0.3);
   input.endFrame();
 
   fpsFrames++;
