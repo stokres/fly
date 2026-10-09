@@ -6,6 +6,7 @@ import { BufferAttribute, BufferGeometry, Group, Mesh, MeshLambertMaterial, type
 import { CELL, CHUNK_SIZE, FINE_SEGMENTS, Heightfield } from './heightfield';
 import { WORLD_HALF_SIZE } from './map';
 import type { TerrainMaps } from './terrainMaps';
+import { CLOUD_SHADOW_GLSL, cloudShadowUniforms } from './cloudShadows';
 import { TERRAIN_GLSL, terrainUniforms } from './terrainShading';
 import { tuning } from './tuning';
 
@@ -25,7 +26,7 @@ interface Chunk {
 function terrainMaterial(maps: TerrainMaps): MeshLambertMaterial {
   const material = new MeshLambertMaterial();
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, terrainUniforms, maps.uniforms);
+    Object.assign(shader.uniforms, terrainUniforms, maps.uniforms, cloudShadowUniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vTerrainPos;\nvarying vec3 vTerrainNormal;')
       .replace(
@@ -43,7 +44,8 @@ function terrainMaterial(maps: TerrainMaps): MeshLambertMaterial {
         uniform sampler2D terrainLightMap;
         uniform float terrainMapExtent;
         uniform float terrainMapsReady;
-        ${TERRAIN_GLSL}`,
+        ${TERRAIN_GLSL}
+        ${CLOUD_SHADOW_GLSL}`,
       )
       .replace(
         '#include <color_fragment>',
@@ -56,7 +58,7 @@ function terrainMaterial(maps: TerrainMaps): MeshLambertMaterial {
       )
       .replace(
         '#include <lights_fragment_begin>',
-        `stylizedDirect = terrainLight.g;
+        `stylizedDirect = terrainLight.g * cloudShade( vTerrainPos.xz );
         #include <lights_fragment_begin>`,
       )
       .replace(

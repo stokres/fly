@@ -45,15 +45,15 @@ const ground = new Mesh(new PlaneGeometry(400, 400).rotateX(-Math.PI / 2), new M
 ground.receiveShadow = true;
 scene.add(ground);
 
-const camera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
+const camera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 30000);
 camera.position.fromArray((params.get('view') ?? '0,18,55').split(',').map(Number));
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 6, 0);
+controls.target.fromArray((params.get('target') ?? '0,6,0').split(',').map(Number));
 controls.update();
 
 const material = new MeshLambertMaterial({ vertexColors: true });
 loadGeometries(file).then((set) => {
-  const names = [...set.keys()].filter((n) => n.endsWith(`_lod${lod}`) && n.includes(filter)).sort();
+  const names = [...set.keys()].filter((n) => (lod === 'all' || n.endsWith(`_lod${lod}`)) && n.includes(filter)).sort();
   let x = 0;
   const items = names.map((n) => {
     const g = set.get(n)!;

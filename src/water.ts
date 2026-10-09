@@ -6,6 +6,7 @@
 // It is a MeshBasicMaterial with its color computed in the shader, so it keeps three's fog.
 import { Color, Mesh, MeshBasicMaterial, PlaneGeometry, type Vector3 } from 'three';
 import type { AtmosphereState } from './atmosphere';
+import { CLOUD_SHADOW_GLSL, cloudShadowUniforms } from './cloudShadows';
 import { LANDSCAPE } from './palette';
 import type { TerrainMaps } from './terrainMaps';
 import { noiseTexture } from './textures';
@@ -35,7 +36,7 @@ export class Water {
   constructor(maps: TerrainMaps) {
     const material = new MeshBasicMaterial();
     material.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, this.uniforms, maps.uniforms);
+      Object.assign(shader.uniforms, this.uniforms, maps.uniforms, cloudShadowUniforms);
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vWaterPos;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWaterPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
@@ -52,6 +53,7 @@ export class Water {
           uniform float waterTime;
           uniform vec3 waterSunDir, waterSunColor, waterAmbient, waterZenith, waterHorizon;
           uniform vec4 waterParams;
+          ${CLOUD_SHADOW_GLSL}
 
           // Slope of a noise layer at uv, from finite differences.
           vec2 rippleSlope( vec2 uv ) {
@@ -70,6 +72,7 @@ export class Water {
           float ground = mix( -100.0, texture2D( terrainHeightMap, muv ).r, terrainMapsReady );
           float depth = max( -ground, 0.0 );
           vec2 light = mix( vec2( 1.0 ), texture2D( terrainLightMap, muv ).rg, terrainMapsReady );
+          light.g *= cloudShade( wp.xz );
 
           // Ripples: two layers drifting across each other; calmer far away to avoid shimmer.
           float t = waterTime;

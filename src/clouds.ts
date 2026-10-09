@@ -1,183 +1,222 @@
-// Cloud layer: a stack of horizontal slices sampling one tileable noise texture. Middle slices
-// cover more than the outer ones, so clouds get rounded tops and bottoms and read as volumes
-// from the side. The CPU keeps the same noise data, so densityAt() matches what is drawn:
-// the game uses it to close the fog in while you punch through a cloud.
+// Cumulus clouds: Blender-built shapes (art/clouds.py), instanced, drifting with the wind and
+// wrapping around the archipelago. Painted lighting in the shader: warm white on the sunlit side,
+// blue-lavender in shadow, darker flat bellies, baked AO in the crevices, a silver lining when the
+// sun is behind. They cast moving shadows on the land (cloudShadows.ts), and densityAt() tells
+// when the camera is inside one, for the whiteout.
 import {
+  type BufferGeometry,
   Color,
-  DataTexture,
   DoubleSide,
-  LinearFilter,
-  LinearMipmapLinearFilter,
-  Mesh,
+  Group,
+  InstancedMesh,
+  Matrix4,
   MeshBasicMaterial,
-  PlaneGeometry,
-  RedFormat,
-  RepeatWrapping,
-  type Vector3,
+  Quaternion,
+  Vector3,
 } from 'three';
 import type { AtmosphereState } from './atmosphere';
+import { type ShadowCaster, drawCloudShadows } from './cloudShadows';
+import { loadGeometries } from './models';
 import { seeded } from './random';
 import { tuning } from './tuning';
 
-const TEX = 256;
-const SLICES = 7;
-const PLANE_SIZE = 14000;
-
-/** Tileable fractal value noise in [0, 1], TEX x TEX. */
-function cloudNoise(rand: () => number): Float32Array {
-  const out = new Float32Array(TEX * TEX);
-  let amp = 0.5;
-  let norm = 0;
-  for (let period = 4; period <= 64; period *= 2) {
-    const lattice = Float32Array.from({ length: period * period }, () => rand());
-    const cell = TEX / period;
-    for (let y = 0; y < TEX; y++) {
-      const gy = y / cell;
-      const y0 = Math.floor(gy);
-      const fy = gy - y0;
-      const sy = fy * fy * (3 - 2 * fy);
-      for (let x = 0; x < TEX; x++) {
-        const gx = x / cell;
-        const x0 = Math.floor(gx);
-        const fx = gx - x0;
-        const sx = fx * fx * (3 - 2 * fx);
-        const at = (i: number, j: number) => lattice[(j % period) * period + (i % period)];
-        const a = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * sx;
-        const b = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * sx;
-        out[y * TEX + x] += (a + (b - a) * sy) * amp;
-      }
-    }
-    norm += amp;
-    amp *= 0.5;
-  }
-  for (let i = 0; i < out.length; i++) out[i] /= norm;
-  return out;
+/** Blobs of one cloud shape: x, y, z, radius, ellipsoid scales (sx, sy, sz). */
+type Blob = [number, number, number, number, number, number, number];
+interface Shape {
+  name: string;
+  balls: Blob[];
+  /** Footprint half-sizes on x and z, and the height of the middle, at scale 1. */
+  rx: number;
+  rz: number;
+  midY: number;
+}
+interface Cloud {
+  shape: number;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  scale: number;
 }
 
-/** Coverage threshold for a height fraction t in [0, 1] through the layer: lowest mid-layer. */
-function sliceThreshold(t: number, coverage: number): number {
-  const profile = 1 - (2 * t - 1) ** 2; // 0 at top/bottom, 1 in the middle
-  return 1 - coverage + (1 - profile) * 0.22;
-}
+const REGION = 7500; // clouds wrap within ±REGION around the origin
+const Y_AXIS = new Vector3(0, 1, 0);
 
 export class Clouds {
-  private noise: Float32Array;
-  private readonly texture: DataTexture;
-  readonly slices: Mesh[] = [];
-  private readonly shared = {
-    cloudNoise: { value: null as DataTexture | null },
-    cloudOffset: { value: new Float32Array(2) },
-    cloudScale: { value: 3500 },
-    cloudSoftness: { value: 0.12 },
+  readonly group = new Group();
+  /** Cloud color seen from inside (the in-cloud fog color). */
+  readonly color = new Color();
+  private shapes: Shape[] = [];
+  private clouds: Cloud[] = [];
+  private meshes: InstancedMesh[] = [];
+  private shadowTimer = 0;
+  private readonly casters: ShadowCaster[] = [];
+  private readonly uniforms = {
     cloudLit: { value: new Color() },
-    cloudShade: { value: new Color() },
+    cloudShadeCol: { value: new Color() },
+    cloudSunCol: { value: new Color() },
+    cloudSunDir: { value: new Vector3(0, 1, 0) },
   };
-  private readonly thresholds: { value: number }[] = [];
-  private readonly offset = { x: 0, z: 0 };
+  private readonly material: MeshBasicMaterial;
+  // Scratch.
+  private readonly m = new Matrix4();
+  private readonly q = new Quaternion();
+  private readonly p = new Vector3();
+  private readonly s = new Vector3();
+  private readonly tmp = new Color();
 
   constructor() {
-    this.noise = cloudNoise(seeded(tuning.world.seed, 'clouds'));
-    const bytes = new Uint8Array(TEX * TEX);
-    this.noise.forEach((v, i) => (bytes[i] = Math.round(v * 255)));
-    this.texture = new DataTexture(bytes, TEX, TEX, RedFormat);
-    this.texture.wrapS = this.texture.wrapT = RepeatWrapping;
-    this.texture.magFilter = LinearFilter;
-    this.texture.minFilter = LinearMipmapLinearFilter;
-    this.texture.generateMipmaps = true;
-    this.texture.needsUpdate = true;
-    this.shared.cloudNoise.value = this.texture;
+    this.material = new MeshBasicMaterial({ vertexColors: true, side: DoubleSide });
+    this.material.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, this.uniforms);
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vCloudPos;\nvarying vec3 vCloudN;')
+        .replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+          mat4 cloudModel = modelMatrix * instanceMatrix;
+          vCloudPos = ( cloudModel * vec4( transformed, 1.0 ) ).xyz;
+          vCloudN = normalize( mat3( cloudModel ) * normal );`,
+        );
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+          varying vec3 vCloudPos;
+          varying vec3 vCloudN;
+          uniform vec3 cloudLit, cloudShadeCol, cloudSunCol, cloudSunDir;`,
+        )
+        .replace(
+          '#include <color_fragment>',
+          `float ao = vColor.r;
+          vec3 N = normalize( vCloudN ) * ( gl_FrontFacing ? 1.0 : -1.0 );
+          vec3 V = normalize( cameraPosition - vCloudPos );
+          float wrap = dot( N, cloudSunDir ) * 0.5 + 0.5;
+          vec3 col = mix( cloudShadeCol, cloudLit, smoothstep( 0.32, 0.78, wrap ) );
+          col *= mix( 0.74, 1.0, ao );
+          col = mix( col, cloudShadeCol * 0.92, smoothstep( -0.35, -0.85, N.y ) * 0.55 ); // flat belly
+          float fres = pow( 1.0 - abs( dot( N, V ) ), 3.0 );
+          float back = pow( max( dot( -V, cloudSunDir ), 0.0 ), 3.0 );
+          col += cloudSunCol * fres * ( 0.12 + back * 0.85 ) * ao;
+          diffuseColor.rgb = col;`,
+        );
+    };
+    this.material.customProgramCacheKey = () => 'cumulus';
 
-    const geometry = new PlaneGeometry(PLANE_SIZE, PLANE_SIZE).rotateX(-Math.PI / 2);
-    for (let i = 0; i < SLICES; i++) {
-      const t = i / (SLICES - 1);
-      const threshold = { value: 0.5 };
-      this.thresholds.push(threshold);
-      const material = new MeshBasicMaterial({ transparent: true, depthWrite: false, side: DoubleSide });
-      material.onBeforeCompile = (shader) => {
-        Object.assign(shader.uniforms, this.shared, { cloudThreshold: threshold, cloudT: { value: t } });
-        shader.vertexShader = shader.vertexShader
-          .replace('#include <common>', '#include <common>\nvarying vec2 vCloudXZ;')
-          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCloudXZ = ( modelMatrix * vec4( transformed, 1.0 ) ).xz;');
-        shader.fragmentShader = shader.fragmentShader
-          .replace(
-            '#include <common>',
-            `#include <common>
-            varying vec2 vCloudXZ;
-            uniform sampler2D cloudNoise;
-            uniform vec2 cloudOffset;
-            uniform float cloudScale, cloudSoftness, cloudThreshold, cloudT;
-            uniform vec3 cloudLit, cloudShade;`,
-          )
-          .replace(
-            '#include <alphamap_fragment>',
-            `#include <alphamap_fragment>
-            float cloudN = texture2D( cloudNoise, ( vCloudXZ + cloudOffset ) / cloudScale ).r;
-            diffuseColor.a *= smoothstep( cloudThreshold, cloudThreshold + cloudSoftness, cloudN );
-            // Lit from above: tops bright, bellies shaded, denser cores a touch darker.
-            diffuseColor.rgb = mix( cloudShade, cloudLit, cloudT ) * ( 1.0 - 0.15 * smoothstep( 0.0, 0.3, cloudN - cloudThreshold ) );`,
-          );
-      };
-      material.customProgramCacheKey = () => 'cloud-slice';
-      const mesh = new Mesh(geometry, material);
-      mesh.renderOrder = 2; // after the water
-      mesh.frustumCulled = false;
-      this.slices.push(mesh);
-    }
-  }
-
-  /**
-   * Cloud color seen from inside: the average over the slices. The in-cloud fog uses it, so
-   * fogged terrain behind the slices matches the slices in front of it.
-   */
-  readonly color = new Color();
-
-  update(dt: number, camera: Vector3, state: AtmosphereState): void {
-    const c = tuning.clouds;
-    this.offset.x += c.windSpeed * dt;
-    this.offset.z += c.windSpeed * 0.4 * dt;
-    this.shared.cloudOffset.value[0] = this.offset.x;
-    this.shared.cloudOffset.value[1] = this.offset.z;
-    this.shared.cloudScale.value = c.scale;
-    this.shared.cloudSoftness.value = c.softness;
-    // Tops take the key light, bellies the ambient sky; both lean toward the horizon color.
-    this.shared.cloudLit.value.copy(state.light).multiplyScalar(0.35 * state.lightIntensity).add(state.horizon).multiplyScalar(0.8);
-    this.shared.cloudShade.value.copy(state.ambientSky).multiplyScalar(0.5 * state.ambientIntensity).lerp(state.horizon, 0.4);
-    this.color.lerpColors(this.shared.cloudShade.value, this.shared.cloudLit.value, 0.5);
-
-    this.slices.forEach((mesh, i) => {
-      const t = i / (SLICES - 1);
-      this.thresholds[i].value = sliceThreshold(t, c.coverage);
-      mesh.position.set(camera.x, c.altitude + (t - 0.5) * c.thickness, camera.z);
-      (mesh.material as MeshBasicMaterial).opacity = c.opacity;
-      mesh.visible = c.coverage > 0;
+    Promise.all([
+      loadGeometries('clouds.glb'),
+      fetch(`${import.meta.env.BASE_URL}models/clouds.json`).then((r) => r.json() as Promise<{ name: string; balls: Blob[] }[]>),
+    ]).then(([geos, meta]) => {
+      this.shapes = meta.map((m) => {
+        let rx = 0;
+        let rz = 0;
+        let lo = Infinity;
+        let hi = -Infinity;
+        for (const b of m.balls) {
+          rx = Math.max(rx, Math.abs(b[0]) + b[3] * b[4]);
+          rz = Math.max(rz, Math.abs(b[2]) + b[3] * b[6]);
+          lo = Math.min(lo, b[1] - b[3]);
+          hi = Math.max(hi, b[1] + b[3]);
+        }
+        return { name: m.name, balls: m.balls, rx: rx * 0.8, rz: rz * 0.8, midY: (lo + hi) / 2 };
+      });
+      this.place();
+      this.meshes = this.shapes.map((shape, si) => {
+        const count = this.clouds.filter((c) => c.shape === si).length;
+        const mesh = new InstancedMesh(geos.get(shape.name) as BufferGeometry, this.material, Math.max(count, 1));
+        mesh.count = count;
+        mesh.frustumCulled = false;
+        this.group.add(mesh);
+        return mesh;
+      });
     });
   }
 
-  /** Cloud density 0..1 at a world position, matching what the slices draw. */
-  densityAt(p: Vector3): number {
+  private place(): void {
     const c = tuning.clouds;
-    if (c.coverage <= 0) return 0;
-    const t = (p.y - (c.altitude - c.thickness / 2)) / c.thickness;
-    if (t < 0 || t > 1) return 0;
-    const u = (((p.x + this.offset.x) / c.scale) * TEX) % TEX;
-    const v = (((p.z + this.offset.z) / c.scale) * TEX) % TEX;
-    const n = this.sample(u < 0 ? u + TEX : u, v < 0 ? v + TEX : v);
-    const threshold = sliceThreshold(t, c.coverage);
-    const x = Math.min(1, Math.max(0, (n - threshold) / c.softness));
-    return x * x * (3 - 2 * x);
+    const rand = seeded(tuning.world.seed, 'cumulus');
+    this.clouds = [];
+    for (let i = 0; i < Math.round(c.count); i++) {
+      this.clouds.push({
+        shape: Math.floor(rand() * this.shapes.length),
+        x: (rand() * 2 - 1) * REGION,
+        z: (rand() * 2 - 1) * REGION,
+        y: c.altitudeMin + rand() * (c.altitudeMax - c.altitudeMin),
+        yaw: rand() * Math.PI * 2,
+        scale: c.sizeMin + rand() * (c.sizeMax - c.sizeMin),
+      });
+    }
   }
 
-  private sample(u: number, v: number): number {
-    // Texel centers sit at +0.5, matching GPU bilinear filtering.
-    const x = u - 0.5;
-    const y = v - 0.5;
-    const x0 = Math.floor(x);
-    const y0 = Math.floor(y);
-    const fx = x - x0;
-    const fy = y - y0;
-    const at = (i: number, j: number) => this.noise[(((j % TEX) + TEX) % TEX) * TEX + (((i % TEX) + TEX) % TEX)];
-    const a = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * fx;
-    const b = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * fx;
-    return a + (b - a) * fy;
+  update(dt: number, state: AtmosphereState): void {
+    const c = tuning.clouds;
+    const u = this.uniforms;
+    // Sunlit tops lean warm, shadow sides take the blue of the sky.
+    u.cloudLit.value.copy(state.light).multiplyScalar(0.42 * state.lightIntensity).add(this.tmp.copy(state.horizon).multiplyScalar(0.5));
+    u.cloudShadeCol.value.copy(state.ambientSky).multiplyScalar(0.8 * state.ambientIntensity).lerp(state.horizon, 0.18);
+    u.cloudSunCol.value.copy(state.light).multiplyScalar(0.45 * state.lightIntensity);
+    u.cloudSunDir.value.copy(state.sunDir.y > -0.05 ? state.sunDir : state.lightDir);
+    this.color.lerpColors(u.cloudShadeCol.value, u.cloudLit.value, 0.6);
+    if (!this.meshes.length) return;
+
+    const wx = c.windSpeed * dt;
+    const wz = c.windSpeed * 0.35 * dt;
+    const index = this.meshes.map(() => 0);
+    this.casters.length = 0;
+    for (const cloud of this.clouds) {
+      cloud.x += wx;
+      cloud.z += wz;
+      if (cloud.x > REGION) cloud.x -= 2 * REGION;
+      if (cloud.z > REGION) cloud.z -= 2 * REGION;
+      const shape = this.shapes[cloud.shape];
+      this.p.set(cloud.x, cloud.y, cloud.z);
+      this.q.setFromAxisAngle(Y_AXIS, cloud.yaw);
+      this.s.setScalar(cloud.scale);
+      this.meshes[cloud.shape].setMatrixAt(index[cloud.shape]++, this.m.compose(this.p, this.q, this.s));
+      this.casters.push({
+        x: cloud.x,
+        z: cloud.z,
+        y: cloud.y + shape.midY * cloud.scale,
+        rx: shape.rx * cloud.scale,
+        rz: shape.rz * cloud.scale,
+        yaw: cloud.yaw,
+      });
+    }
+    for (const mesh of this.meshes) mesh.instanceMatrix.needsUpdate = true;
+
+    this.shadowTimer -= dt;
+    if (this.shadowTimer <= 0) {
+      this.shadowTimer = 0.25;
+      drawCloudShadows(this.casters, state.sunDir, c.shadowStrength);
+    }
+  }
+
+  /** How deep inside a cloud a point is, 0..1. */
+  densityAt(p: Vector3): number {
+    let field = 0;
+    for (const cloud of this.clouds) {
+      const shape = this.shapes[cloud.shape];
+      const reach = Math.max(shape.rx, shape.rz) * 1.6 * cloud.scale;
+      const dx = p.x - cloud.x;
+      const dz = p.z - cloud.z;
+      if (dx * dx + dz * dz > reach * reach) continue;
+      // Into the cloud's local frame.
+      const cos = Math.cos(-cloud.yaw);
+      const sin = Math.sin(-cloud.yaw);
+      const lx = (dx * cos + dz * sin) / cloud.scale;
+      const lz = (-dx * sin + dz * cos) / cloud.scale;
+      const ly = (p.y - cloud.y) / cloud.scale;
+      for (const b of shape.balls) {
+        const ex = (lx - b[0]) / b[4];
+        const ey = (ly - b[1]) / b[5];
+        const ez = (lz - b[2]) / b[6];
+        const R = b[3] * 1.3;
+        const d2 = (ex * ex + ey * ey + ez * ez) / (R * R);
+        if (d2 < 1) field += (1 - d2) * (1 - d2);
+      }
+    }
+    // The meshes are the 0.18 iso-surface of this field; ramp from just outside to well inside.
+    const x = Math.min(1, Math.max(0, (field - 0.25) / 0.4));
+    return x * x * (3 - 2 * x);
   }
 }

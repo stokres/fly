@@ -60,7 +60,7 @@ const input = new Input();
 const atmosphere = new Atmosphere();
 const sky = new Sky();
 const clouds = new Clouds();
-world.scene.add(grass.mesh, vegetation.group, sky.mesh, water.mesh, terrain.group, landmarks.mesh, thermals.group, creature.object, ...clouds.slices);
+world.scene.add(grass.mesh, vegetation.group, sky.mesh, water.mesh, terrain.group, landmarks.mesh, thermals.group, creature.object, clouds.group);
 const castShadows = (o: Object3D) => o.traverse((c) => (c.castShadow = c.receiveShadow = true));
 castShadows(creature.object);
 castShadows(landmarks.mesh);
@@ -195,7 +195,7 @@ function frame(now: number): void {
   const sh = tuning.shading;
   shadingUniforms.toonParams.value.set([sh.rampStart, sh.rampEnd, sh.rimStrength, sh.rimPower]);
   const camPos = follow.camera.position;
-  clouds.update(dt, camPos, atmosphere.state);
+  clouds.update(dt, atmosphere.state);
   inCloud += (clouds.densityAt(camPos) - inCloud) * (1 - Math.exp(-6 * dt));
   world.applyAtmosphere(atmosphere.state, inCloud, clouds.color);
   fogUniforms.fogParams.value[0] *= 1 - inCloud; // no sun tint inside a cloud: an even whiteout

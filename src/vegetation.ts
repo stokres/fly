@@ -16,6 +16,7 @@ import {
   Quaternion,
   Vector3,
 } from 'three';
+import { CLOUD_SHADOW_GLSL, cloudShadowUniforms } from './cloudShadows';
 import type { Heightfield } from './heightfield';
 import { WORLD_HALF_SIZE } from './map';
 import { loadGeometries } from './models';
@@ -52,7 +53,7 @@ export type Clearing = [number, number, number];
 function vegetationMaterial(maps: TerrainMaps, time: { value: number }): MeshLambertMaterial {
   const m = new MeshLambertMaterial({ vertexColors: true });
   m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, maps.uniforms, { vegTime: time });
+    Object.assign(shader.uniforms, maps.uniforms, cloudShadowUniforms, { vegTime: time });
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -81,12 +82,13 @@ function vegetationMaterial(maps: TerrainMaps, time: { value: number }): MeshLam
         varying vec2 vVegBase;
         uniform sampler2D terrainLightMap;
         uniform float terrainMapExtent;
-        uniform float terrainMapsReady;`,
+        uniform float terrainMapsReady;
+        ${CLOUD_SHADOW_GLSL}`,
       )
       .replace(
         '#include <lights_fragment_begin>',
         `vec2 vegLight = mix( vec2( 1.0 ), texture2D( terrainLightMap, vVegBase / ( 2.0 * terrainMapExtent ) + 0.5 ).rg, terrainMapsReady );
-        stylizedDirect = vegLight.g;
+        stylizedDirect = vegLight.g * cloudShade( vVegBase );
         #include <lights_fragment_begin>`,
       )
       .replace(

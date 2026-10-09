@@ -76,7 +76,7 @@
     "moteSize": 3,
     "birdsPerThermal": 4,
     "birdSize": 3,
-    "columnOpacity": 0.12,
+    "columnOpacity": 0.04,
     "extraCount": 16
   },
   "landmarks": {
@@ -98,14 +98,14 @@
     "fogHeightScale": 650
   },
   "clouds": {
-    "altitude": 480,
-    "thickness": 70,
-    "coverage": 0.45,
-    "softness": 0.12,
-    "scale": 3500,
-    "windSpeed": 3,
-    "opacity": 0.6,
-    "insideFogDensity": 0.02
+    "count": 42,
+    "altitudeMin": 360,
+    "altitudeMax": 620,
+    "sizeMin": 0.8,
+    "sizeMax": 1.9,
+    "windSpeed": 4,
+    "insideFogDensity": 0.02,
+    "shadowStrength": 0.45
   },
   "audio": {
     "masterVolume": 0.8,

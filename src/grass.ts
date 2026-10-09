@@ -13,6 +13,7 @@ import {
   MeshLambertMaterial,
   Vector3,
 } from 'three';
+import { CLOUD_SHADOW_GLSL, cloudShadowUniforms } from './cloudShadows';
 import type { Heightfield } from './heightfield';
 import { mulberry32 } from './random';
 import type { TerrainMaps } from './terrainMaps';
@@ -65,7 +66,7 @@ export class Grass {
 
     const material = new MeshLambertMaterial({ side: DoubleSide });
     material.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, this.uniforms, terrainUniforms, maps.uniforms);
+      Object.assign(shader.uniforms, this.uniforms, terrainUniforms, maps.uniforms, cloudShadowUniforms);
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
@@ -122,7 +123,8 @@ export class Grass {
           uniform sampler2D terrainLightMap;
           uniform float terrainMapExtent;
           uniform float terrainMapsReady;
-          ${TERRAIN_GLSL}`,
+          ${TERRAIN_GLSL}
+          ${CLOUD_SHADOW_GLSL}`,
         )
         .replace(
           '#include <color_fragment>',
@@ -141,7 +143,7 @@ export class Grass {
         )
         .replace(
           '#include <lights_fragment_begin>',
-          `stylizedDirect = grassLight.g;
+          `stylizedDirect = grassLight.g * cloudShade( vBladeBase.xz );
           #include <lights_fragment_begin>`,
         )
         .replace(

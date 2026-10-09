@@ -111,15 +111,16 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     fogHeightScale: [50, 3000, 10],
   },
   clouds: {
-    altitude: [100, 1500, 5],
-    thickness: [5, 400, 1],
-    coverage: [0, 1, 0.01],
-    softness: [0.01, 0.5, 0.01],
-    scale: [500, 10000, 50],
-    windSpeed: [0, 30, 0.1],
-    opacity: [0, 1, 0.01],
+    count: [0, 150, 1],
+    altitudeMin: [100, 1500, 5],
+    altitudeMax: [100, 2000, 5],
+    sizeMin: [0.2, 4, 0.05],
+    sizeMax: [0.2, 5, 0.05],
+    windSpeed: [0, 40, 0.5],
     insideFogDensity: [0, 0.1, 0.001],
+    shadowStrength: [0, 1, 0.01],
   },
+
   audio: {
     masterVolume: [0, 1, 0.01],
     windVolume: [0, 1.5, 0.01],
