@@ -143,7 +143,8 @@
     "wavesVolume": 0.5,
     "surfFalloff": 160,
     "birdsVolume": 0.5,
-    "birdHearing": 350
+    "birdHearing": 350,
+    "chimeVolume": 1
   },
   "shading": {
     "rampStart": -0.05,

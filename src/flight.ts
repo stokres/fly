@@ -55,6 +55,8 @@ export class Flight {
   energy = 1;
   /** Increments on each flap; visuals can use it to trigger a wingbeat. */
   flapCount = 0;
+  /** Extra boost top speed (m/s) earned from golden feathers. */
+  boostBonus = 0;
   /** 0..1 while boosting (eased), for visuals and audio. */
   boost = 0;
   /** 0..1 how close to the surface (skimming), for visuals, audio and energy. */
@@ -136,7 +138,7 @@ export class Flight {
     const boosting = input.boost && this.energy > 0.02;
     this.boost += ((boosting ? 1 : 0) - this.boost) * (1 - Math.exp(-6 * dt));
     if (boosting) {
-      if (this.speed < t.boostMaxSpeed) this.speed += t.boostAccel * dt;
+      if (this.speed < t.boostMaxSpeed + this.boostBonus) this.speed += t.boostAccel * dt;
       this.energy = Math.max(0, this.energy - t.boostCost * dt);
     }
 

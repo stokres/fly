@@ -2,7 +2,8 @@
 // their houses over gentle ground (facing downhill, toward the sea), single props and landmarks
 // go where they were put. Seeded, so a village always looks the same.
 import type { Heightfield } from './heightfield';
-import { LANDMARKS, PROPS, VILLAGES } from './map';
+import { LANDMARKS, PROPS, SHRINES, VILLAGES } from './map';
+import { SHRINE_SCALE } from './collectibles';
 import { seeded } from './random';
 import type { Clearing } from './vegetation';
 
@@ -40,6 +41,12 @@ export function computePlacements(hf: Heightfield, seed: number): Placement[] {
   for (const p of PROPS) {
     const y = p.model === 'pier' ? 0 : hf.surface(p.x, p.z);
     out.push({ model: p.model, x: p.x, y, z: p.z, yaw: p.angle, scale: 1, landmark: false, clear: p.model === 'temple' ? 28 : 12 });
+  }
+  for (const sh of SHRINES) {
+    // Sit on the lowest ground under the footprint, so no corner floats.
+    let y = hf.surface(sh.x, sh.z);
+    for (let a = 0; a < 8; a++) y = Math.min(y, hf.surface(sh.x + Math.cos(a) * 10, sh.z + Math.sin(a) * 10));
+    out.push({ model: 'shrine', x: sh.x, y, z: sh.z, yaw: sh.angle, scale: SHRINE_SCALE, landmark: false, clear: 22 });
   }
   for (const v of VILLAGES) {
     const placed: { x: number; z: number }[] = [];

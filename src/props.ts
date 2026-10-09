@@ -107,7 +107,7 @@ export class Props {
       });
       const geo1 = set.get(`${model}_lod1`);
       const geoWin = set.get(`${model}_win`);
-      const winMat = model === 'ring' ? this.runeMaterial : this.windowMaterial;
+      const winMat = model === 'ring' || model === 'shrine' ? this.runeMaterial : this.windowMaterial;
       this.batches.push({
         model,
         items,

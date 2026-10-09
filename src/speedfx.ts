@@ -13,6 +13,7 @@ import {
   Vector3,
 } from 'three';
 import { mulberry32 } from './random';
+import { softDotTexture } from './textures';
 import { tuning } from './tuning';
 
 const LINES = 140;
@@ -66,7 +67,7 @@ export class SpeedFx {
     pg.setAttribute('color', new BufferAttribute(new Float32Array(PARTICLES * 4), 4).setUsage(DynamicDrawUsage));
     this.particles = new Points(
       pg,
-      new PointsMaterial({ size: 0.9, vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true }),
+      new PointsMaterial({ size: 0.7, map: softDotTexture, vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true }),
     );
     this.particles.frustumCulled = false;
   }

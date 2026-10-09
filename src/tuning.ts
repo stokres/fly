@@ -158,6 +158,7 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     surfFalloff: [20, 800, 5],
     birdsVolume: [0, 2, 0.01],
     birdHearing: [50, 2000, 10],
+    chimeVolume: [0, 3, 0.01],
   },
   shading: {
     rampStart: [-1, 0.5, 0.01],

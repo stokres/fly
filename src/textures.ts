@@ -1,7 +1,7 @@
 // Shared procedural textures. The noise texture is the painterly backbone of the world: terrain
 // color patches, grass tint, water ripples and sky wisps all sample it, and the CPU keeps the
 // same data (noiseAt) so vegetation placement matches the forest patches the terrain paints.
-import { DataTexture, LinearFilter, LinearMipmapLinearFilter, RepeatWrapping, RGBAFormat } from 'three';
+import { CanvasTexture, DataTexture, LinearFilter, LinearMipmapLinearFilter, RepeatWrapping, RGBAFormat } from 'three';
 import { mulberry32 } from './random';
 
 export const NOISE_SIZE = 256;
@@ -85,3 +85,18 @@ export function noiseAt(u: number, v: number, channel: number): number {
   const b = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * fx;
   return a + (b - a) * fy;
 }
+
+/** Soft round dot for particles (sparks, spray, motes). */
+export const softDotTexture = (() => {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.7)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return new CanvasTexture(canvas);
+})();

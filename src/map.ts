@@ -102,7 +102,7 @@ export const LANDMARKS: LandmarkPlacement[] = [
 export const VILLAGES: Village[] = [
   { name: 'Harbor Town', x: 80, z: 2520, radius: 190, houses: 38 },
   { name: 'Peak Cove', x: -2450, z: 1080, radius: 170, houses: 16 },
-  { name: 'Ember Hamlet', x: -1100, z: 1080, radius: 150, houses: 7 },
+  { name: 'Ember Hamlet', x: -1440, z: 1120, radius: 130, houses: 9 },
   { name: 'Saddle', x: 660, z: 1140, radius: 120, houses: 4 },
 ];
 
@@ -200,4 +200,100 @@ export const CURRENTS: CurrentPath[] = [
     speed: 90,
     radius: 28,
   },
+];
+
+/**
+ * Trails of light motes. With `agl`, point heights are above the ground (or sea) below them,
+ * otherwise absolute; either way motes stay at least 6 m above the surface.
+ */
+export interface MoteTrail {
+  name: string;
+  points: [number, number, number][];
+  /** Meters between motes. */
+  spacing: number;
+  agl?: boolean;
+}
+
+function spiral(cx: number, cz: number, r: number, y0: number, y1: number, turns: number, start = 0): [number, number, number][] {
+  const out: [number, number, number][] = [];
+  const n = Math.round(turns * 12);
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const a = start + t * turns * Math.PI * 2;
+    out.push([cx + Math.cos(a) * r, y0 + (y1 - y0) * t, cz + Math.sin(a) * r]);
+  }
+  return out;
+}
+
+function wave(x0: number, z0: number, x1: number, z1: number, y: number, amp: number, waves: number): [number, number, number][] {
+  const out: [number, number, number][] = [];
+  const n = waves * 8;
+  const len = Math.hypot(x1 - x0, z1 - z0);
+  const nx = -(z1 - z0) / len;
+  const nz = (x1 - x0) / len;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const o = Math.sin(t * waves * Math.PI * 2) * amp;
+    out.push([x0 + (x1 - x0) * t + nx * o, y, z0 + (z1 - z0) * t + nz * o]);
+  }
+  return out;
+}
+
+export const MOTE_TRAILS: MoteTrail[] = [
+  { name: 'Welcome', points: [[0, 112, 3600], [30, 95, 3320], [60, 72, 3060], [60, 70, 2960], [40, 80, 2880]], spacing: 24 },
+  { name: 'Harbor Beach', points: spiral(80, 2520, 430, 14, 14, 0.75, 0.3), spacing: 26, agl: true },
+  { name: 'Windmill Slalom', points: [[400, 25, 1500], [560, 20, 1300], [700, 25, 1180], [610, 20, 1110], [520, 25, 980], [700, 30, 800]], spacing: 22, agl: true },
+  { name: 'Peak Gully', points: [[-1500, 520, 150], [-1250, 330, 350], [-1050, 200, 560], [-850, 90, 760], [-700, 30, 900]], spacing: 26 },
+  { name: 'Ridge Crest', points: [[1500, 25, 520], [1820, 25, -60], [2150, 25, -620], [2500, 25, -1180]], spacing: 30, agl: true },
+  { name: 'Needle Helix', points: spiral(-3000, -2100, 95, 90, 300, 2.2, 0.8), spacing: 22 },
+  { name: 'Ring Line', points: [[-300 - 0.479 * 400, 125, -2500 - 0.878 * 400], [-300, 115, -2500], [-300 + 0.479 * 400, 125, -2500 + 0.878 * 400]], spacing: 22 },
+  { name: 'Lagoon Skim', points: spiral(-300, -2500, 260, 8, 8, 0.85, 2.2), spacing: 24, agl: true },
+  { name: 'Mesa Rim', points: spiral(2600, -2800, 470, 245, 245, 0.6, 3.6), spacing: 28 },
+  { name: 'Sea Waves', points: wave(-600, 2300, -2200, 1500, 9, 60, 3), spacing: 26, agl: true },
+  { name: 'Lighthouse Spiral', points: spiral(350, 2570, 26, 18, 60, 1.5, 0), spacing: 14, agl: true },
+  { name: 'Cove Roofs', points: [[-2650, 35, 1200], [-2450, 30, 1080], [-2250, 35, 960], [-2050, 40, 900]], spacing: 24, agl: true },
+];
+
+/**
+ * Golden feathers: permanent finds in special places. `y` is absolute; without it the feather
+ * floats `above` meters over the ground below (default 6).
+ */
+export interface FeatherPlacement {
+  name: string;
+  x: number;
+  z: number;
+  y?: number;
+  above?: number;
+}
+
+export const FEATHERS: FeatherPlacement[] = [
+  { name: 'Under the arch', x: 60, z: 3020, y: 70 },
+  { name: 'Needle summit', x: -3000, z: -2100, y: 312 },
+  { name: 'Heart of the ring', x: -300, z: -2500, y: 115 },
+  { name: 'Inside the tower', x: 2760, z: -2940, above: 45 },
+  { name: 'Temple steps', x: 2520, z: -2720, above: 14 },
+  { name: 'Peak summit', x: -1900, z: 300, above: 18 },
+  { name: 'Lighthouse lantern', x: 350, z: 2570, above: 38 },
+  { name: 'Between the windmills', x: 655, z: 1145, above: 9 },
+  { name: 'Lagoon heart', x: -470, z: -2620, y: 5 },
+  { name: 'Sky over the ridge', x: 1900, z: -200, y: 900 },
+  { name: 'Cove harbor', x: -2460, z: 1340, y: 5 },
+  { name: 'Ember chimneys', x: -1440, z: 1120, above: 22 },
+];
+
+/** Shrines: stone gates on high places; flying through one reveals the feather `reveals`. */
+export interface ShrinePlacement {
+  x: number;
+  z: number;
+  angle: number;
+  reveals: number;
+}
+
+export const SHRINES: ShrinePlacement[] = [
+  { x: -250, z: 2450, angle: 0.2, reveals: 7 },
+  { x: -1750, z: 510, angle: 0.9, reveals: 5 },
+  { x: 1800, z: -260, angle: 2.0, reveals: 9 },
+  { x: -140, z: -2030, angle: 0.3, reveals: 8 },
+  { x: 2400, z: -2600, angle: 0.6, reveals: 3 },
+  { x: -3100, z: -2050, angle: 1.2, reveals: 1 },
 ];
