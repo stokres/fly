@@ -56,7 +56,10 @@
     "rollResponse": 4,
     "groundClearance": 3,
     "shake": 1,
-    "boostFov": 8
+    "boostFov": 8,
+    "portraitMinHFovDeg": 62,
+    "portraitDistance": 1.0,
+    "portraitLookLift": 3
   },
   "creature": {
     "scale": 1,
@@ -188,6 +191,9 @@
     "invertPitch": false,
     "gamepadDeadzone": 0.15,
     "mouseSensitivity": 1,
-    "mouseReturn": 2.5
+    "mouseReturn": 2.5,
+    "tiltSensitivity": 1,
+    "tiltRangeDeg": 28,
+    "tiltDeadzoneDeg": 2.5
   }
 }

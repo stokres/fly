@@ -3,6 +3,7 @@
 // Mouse: click the game to capture the pointer. Mouse movement pushes a virtual stick that
 // springs back to center, so small moves give gentle turns and a held push keeps turning.
 // Left button flaps, right button (or Shift) boosts.
+import type { TouchControls } from './touch';
 import { tuning } from './tuning';
 
 export interface FlightInput {
@@ -34,6 +35,8 @@ export class Input {
   mouseActive = false;
   /** When false (menus open), the pointer is never captured. */
   captureEnabled = true;
+  /** On phones and tablets: tilt steering and on-screen buttons. */
+  touch: TouchControls | null = null;
 
   constructor(canvas: HTMLElement) {
     window.addEventListener('keydown', (e) => {
@@ -49,7 +52,7 @@ export class Input {
     });
 
     canvas.addEventListener('mousedown', (e) => {
-      if (!this.locked && this.captureEnabled) {
+      if (!this.locked && this.captureEnabled && !this.touch) {
         void canvas.requestPointerLock?.();
         return; // the capturing click doesn't also flap
       }
@@ -109,6 +112,14 @@ export class Input {
       if (pitch === 0) pitch = this.mouseStick.y;
       flap ||= (this.mouseButtons & 1) !== 0;
       boost ||= (this.mouseButtons & 2) !== 0;
+    }
+
+    if (this.touch) {
+      const t = this.touch.read(dt);
+      if (roll === 0) roll = t.roll;
+      if (pitch === 0) pitch = t.pitch;
+      flap ||= t.flap;
+      boost ||= t.boost;
     }
 
     const pad = firstGamepad();

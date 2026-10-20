@@ -35,6 +35,19 @@ const STRINGS = {
   hintCurrent: { es: 'Corriente de viento: déjate llevar', en: 'Wind current: let it carry you' },
   hintSkim: { es: 'Rozar el agua o la hierba recarga energía', en: 'Skimming water or grass refills energy' },
   hintBoost: { es: 'Mayús o clic derecho: impulso', en: 'Shift or right click: boost' },
+  tiltSensitivity: { es: 'Sensibilidad de inclinación', en: 'Tilt sensitivity' },
+  hintTilt: {
+    es: 'Inclina el móvil para girar y subir o bajar. El botón dorado acelera',
+    en: 'Tilt the phone to turn and climb or dive. The golden button boosts',
+  },
+  hintNoTilt: {
+    es: 'Sin sensor de movimiento: arrastra el dedo para dirigir',
+    en: 'No motion sensor: drag your thumb to steer',
+  },
+  holdHint: {
+    es: 'Sujeta el móvil en vertical, en una postura cómoda: esa será la posición neutra',
+    en: 'Hold the phone upright, comfortably: that becomes the neutral position',
+  },
   qualityLowered: { es: 'Calidad gráfica ajustada para ir más fluido', en: 'Graphics quality lowered for smoother flight' },
   controlsList: {
     es: [
@@ -56,6 +69,24 @@ const STRINGS = {
       ['M', 'Mute'],
       ['Esc', 'Pause'],
       ['Gamepad', 'Left stick · A flap · B/LT boost'],
+    ],
+  },
+  controlsTouch: {
+    es: [
+      ['Inclinar a los lados', 'Girar'],
+      ['Inclinar hacia delante / atrás', 'Bajar / subir'],
+      ['Botón dorado', 'Impulso'],
+      ['Botón ⌃', 'Aletear'],
+      ['◎', 'Recalibrar la posición neutra'],
+      ['❚❚', 'Pausa'],
+    ],
+    en: [
+      ['Tilt sideways', 'Turn'],
+      ['Tilt forward / back', 'Dive / climb'],
+      ['Golden button', 'Boost'],
+      ['⌃ button', 'Flap'],
+      ['◎', 'Recalibrate the neutral position'],
+      ['❚❚', 'Pause'],
     ],
   },
   goal: {

@@ -29,7 +29,8 @@ Original design notes: `docs/design-starting-point.md` (a starting point, not a 
 | `src/main.ts` | bootstrap, game states (title/playing/paused), fixed-timestep loop, settings, adaptive quality |
 | `src/flight.ts` | arcade flight model: pitch/bank/yaw, speed, cruise thrust, boost, skim, currents, flap, energy |
 | `src/camera.ts` | follow camera: per-axis springs relative to the bird's velocity, look-ahead, FOV, roll, shake |
-| `src/input.ts` | keyboard + pointer-locked mouse (virtual stick) + gamepad → `FlightInput` |
+| `src/input.ts` | keyboard + pointer-locked mouse (virtual stick) + gamepad + touch → `FlightInput` |
+| `src/touch.ts` | phones: tilt steering (DeviceOrientation, calibrated neutral), boost/flap/pause buttons, thumb-drag fallback |
 | `src/creature.ts` | spirit bird: Blender parts assembled into a skeleton, procedural animation, rim light |
 | `src/streamers.ts` | tail ribbon streamers, simulated as world-space chains |
 | `src/map.ts` | **the curated world**: islands, landmarks, villages, props, boats, currents, mote trails, feathers, shrines, spawn |
@@ -74,6 +75,10 @@ Keep files focused. A new system gets a new file, not a new section in an existi
 - World: sea level is y = 0, north is -Z. The archipelago fits in ±5 km (`WORLD_HALF_SIZE`); beyond is open sea.
 - To place or reshape anything in the world, edit `map.ts`. Noise only adds detail around authored shapes.
 - Ground queries go through `heightfield.surface()` (matches the rendered mesh), never the raw `height()`.
+- Phones (`isTouchDevice`): `body.touch` class for layout, portrait camera framing (`camera.portrait*`
+  tuning: wider FOV keeps the horizontal view), lighter default quality, motion permission requested in
+  the Play tap (iOS requires a gesture), fullscreen + portrait lock where allowed, screen wake lock.
+  Tilt mapping: side tilt banks; phone flatter than the neutral pose dives, more upright climbs.
 - Dev: `#x,y,z,headingDeg` in the URL starts there and skips the title (heading 0 = north, 90 = east).
   `?debug` exposes `window.fly` (scene, renderer, tuning) for tooling.
 - Forward is **-Z**. `yaw > 0` turns left, `pitch > 0` is nose up, `bank > 0` is right wing down.
@@ -107,6 +112,8 @@ Adaptive quality steps down from high → medium → low if flight stays under 4
 - Tune feel with sliders, not prompts: Export JSON from the panel, replace `src/tuning-defaults.json`.
 - A visual pass must never silently change flight or camera feel: if a change touches `flight.ts`,
   `camera.ts` or tuning defaults, say so explicitly.
+- Mobile: test with Playwright `isMobile/hasTouch` in a portrait viewport, dispatching
+  `DeviceOrientationEvent`s from `page.evaluate` (in W3C angles, larger `beta` = more upright phone).
 - Verify visually: the preview at `npm run build && npx vite preview` with Playwright screenshots (Chromium at
   `/opt/pw-browsers`, SwiftShader: slow, so start near what you test via the URL hash).
 
@@ -114,9 +121,9 @@ Adaptive quality steps down from high → medium → low if flight stays under 4
 
 Done: stylized rendering base, Blender asset pipeline, vegetation and grass, cumulus clouds with shadows,
 villages/landmarks/boats, spirit bird, arcade flight with boost/mouse/currents/speed FX, collectibles,
-HUD, menus, save, ES/EN, adaptive quality.
+HUD, menus, save, ES/EN, adaptive quality, mobile portrait play with tilt steering.
 
-Ideas not done: mobile/touch controls, landmark-specific challenges (timed rings through the arch), day
+Ideas not done: landmark-specific challenges (timed rings through the arch), day
 cycle on by default with night-only secrets, more creature variety (skins unlocked by feathers), photo mode,
 moving vegetation placement to a worker, soft depth fade where clouds meet terrain.
 

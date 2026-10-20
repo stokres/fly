@@ -1,6 +1,7 @@
 // Title screen, pause menu, settings and controls. Menus never stop the world from rendering:
 // the islands stay alive behind them.
 import { type Lang, getLang, setLang, t } from './i18n';
+import { isTouchDevice } from '../touch';
 import type { Quality, SaveData } from './save';
 
 export interface MenuCallbacks {
@@ -68,6 +69,7 @@ export class Menu {
         <div class="sub shadow">${t('subtitle')}</div>
         <div class="goal shadow">${t('goal')}</div>
         ${p.feathers || p.shrines ? progress : ''}
+        ${isTouchDevice ? `<div class="goal shadow" style="opacity:0.8;font-size:13px">${t('holdHint')}</div>` : ''}
         <button class="btn" data-play>${t('play')}</button>
         <div><button class="btn ghost" data-settings>${t('settings')}</button><button class="btn ghost" data-controls>${t('controls')}</button></div>
         <div class="loading shadow">· · ·</div>
@@ -79,7 +81,7 @@ export class Menu {
         <div><button class="btn ghost" data-settings>${t('settings')}</button><button class="btn ghost" data-controls>${t('controls')}</button></div>
       </div>`;
     } else if (this.screen === 'controls') {
-      const keys = t('controlsList')
+      const keys = (isTouchDevice ? t('controlsTouch') : t('controlsList'))
         .map(([k, v]) => `<div class="k">${k}</div><div>${v}</div>`)
         .join('');
       r.innerHTML = `<div class="panel"><h2>${t('controls')}</h2><div class="keys">${keys}</div>
@@ -92,7 +94,11 @@ export class Menu {
         <div class="row"><span>${t('language')}</span>${seg('lang', [['es', 'Español'], ['en', 'English']], getLang())}</div>
         <div class="row"><span>${t('volume')}</span><input type="range" min="0" max="1" step="0.01" value="${s.volume}" data-range="volume"></div>
         <div class="row"><span>${t('music')}</span><input type="range" min="0" max="1.5" step="0.01" value="${s.music}" data-range="music"></div>
-        <div class="row"><span>${t('sensitivity')}</span><input type="range" min="0.2" max="3" step="0.05" value="${s.sensitivity}" data-range="sensitivity"></div>
+        ${
+          isTouchDevice
+            ? `<div class="row"><span>${t('tiltSensitivity')}</span><input type="range" min="0.4" max="2.5" step="0.05" value="${s.tiltSensitivity}" data-range="tiltSensitivity"></div>`
+            : `<div class="row"><span>${t('sensitivity')}</span><input type="range" min="0.2" max="3" step="0.05" value="${s.sensitivity}" data-range="sensitivity"></div>`
+        }
         <div class="row"><span>${t('cameraRoll')}</span><input type="range" min="0" max="0.8" step="0.01" value="${s.cameraRoll}" data-range="cameraRoll"></div>
         <div class="row"><span>${t('invert')}</span>${seg('invert', [['0', '—'], ['1', '✓']], s.invert ? '1' : '0')}</div>
         <div class="row"><span>${t('quality')}</span>${seg('quality', [['low', t('low')], ['medium', t('medium')], ['high', t('high')]], s.quality)}</div>
@@ -123,7 +129,7 @@ export class Menu {
     const s = this.save.settings;
     r.querySelectorAll<HTMLInputElement>('[data-range]').forEach((el) =>
       el.addEventListener('input', () => {
-        const key = el.dataset.range as 'volume' | 'music' | 'sensitivity' | 'cameraRoll';
+        const key = el.dataset.range as 'volume' | 'music' | 'sensitivity' | 'cameraRoll' | 'tiltSensitivity';
         s[key] = Number(el.value);
         this.cb.onSettingsChanged();
       }),

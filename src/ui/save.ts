@@ -17,6 +17,7 @@ export interface SaveData {
     /** Set once the player chooses a quality; stops automatic adjustment. */
     qualityLocked: boolean;
     cameraRoll: number;
+    tiltSensitivity: number;
   };
 }
 
@@ -27,7 +28,7 @@ export function defaultSave(): SaveData {
     feathers: [],
     shrines: [],
     hintsShown: [],
-    settings: { lang: null, volume: 0.8, music: 0.6, sensitivity: 1, invert: false, quality: 'high', qualityLocked: false, cameraRoll: 0.4 },
+    settings: { lang: null, volume: 0.8, music: 0.6, sensitivity: 1, invert: false, quality: 'high', qualityLocked: false, cameraRoll: 0.4, tiltSensitivity: 1 },
   };
 }
 

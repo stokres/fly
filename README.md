@@ -25,6 +25,10 @@ turquoise sea. Fly fast, ride the wind, and find the twelve golden feathers.
 | Pause | Esc | |
 | Mute | M | |
 
+**On a phone** (hold it upright, portrait): tilt sideways to turn, tilt the top away to dive and toward
+you to climb. The golden button boosts, ⌃ flaps, ◎ recalibrates the neutral position. Whatever angle you
+hold the phone at when you press Fly becomes neutral. Without a motion sensor, drag a thumb to steer.
+
 Settings (language, volume, mouse sensitivity, camera roll, invert, graphics quality) are in the menu.
 Progress is saved in your browser.
 

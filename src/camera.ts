@@ -105,9 +105,11 @@ export class FollowCamera {
     this.up.crossVectors(this.right, this.fwd);
 
     const extra = Math.max(0, speed - tuning.flight.startSpeed) * c.distancePerSpeed;
+    // The wide portrait FOV makes the bird small: come a little closer.
+    const dist = (c.distance + extra) * MathUtils.lerp(1, c.portraitDistance, this.portrait);
     this.desired
       .copy(pose.position)
-      .addScaledVector(this.fwd, -(c.distance + extra))
+      .addScaledVector(this.fwd, -dist)
       .addScaledVector(UP, c.height);
   }
 
@@ -120,7 +122,21 @@ export class FollowCamera {
   private targetFov(speed: number): number {
     const c = tuning.camera;
     const t = MathUtils.smoothstep(speed, c.fovSpeedMin, c.fovSpeedMax);
-    return MathUtils.lerp(c.fovMin, c.fovMax, t);
+    let fov = MathUtils.lerp(c.fovMin, c.fovMax, t);
+    // Portrait screens: FOV is vertical, so a tall screen would see a sliver of the world side to
+    // side. Widen it until the horizontal view is at least portraitMinHFovDeg (capped).
+    const aspect = this.camera.aspect;
+    if (aspect < 1) {
+      const minH = (c.portraitMinHFovDeg * Math.PI) / 360;
+      const needed = (2 * Math.atan(Math.tan(minH) / aspect) * 180) / Math.PI;
+      fov = Math.min(105, Math.max(fov, needed + (fov - c.fovMin) * 0.5));
+    }
+    return fov;
+  }
+
+  /** 0 on landscape screens, 1 on tall portrait ones. */
+  private get portrait(): number {
+    return MathUtils.clamp((1 - this.camera.aspect) / 0.45, 0, 1);
   }
 
   private apply(pose: FlightPose, velocity: Vector3): void {
@@ -128,7 +144,8 @@ export class FollowCamera {
     this.look
       .copy(pose.position)
       .addScaledVector(velocity, c.lookAhead)
-      .addScaledVector(UP, c.lookHeight);
+      // In portrait, aim a little higher so the bird sits in the lower half, below the horizon view.
+      .addScaledVector(UP, c.lookHeight + c.portraitLookLift * this.portrait);
     this.camera.up.copy(UP);
     this.camera.lookAt(this.look);
     // Camera looks down -Z like the creature, so the same sign convention applies.

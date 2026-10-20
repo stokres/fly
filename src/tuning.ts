@@ -70,6 +70,9 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     groundClearance: [0, 20, 0.1],
     shake: [0, 4, 0.05],
     boostFov: [0, 30, 0.5],
+    portraitMinHFovDeg: [30, 90, 1],
+    portraitDistance: [0.4, 1.5, 0.01],
+    portraitLookLift: [-5, 10, 0.1],
   },
   creature: {
     scale: [0.3, 3, 0.05],
@@ -202,6 +205,9 @@ const RANGES: { [G in Group]: Partial<Record<keyof Tuning[G], Range>> } = {
     gamepadDeadzone: [0, 0.5, 0.01],
     mouseSensitivity: [0.1, 5, 0.05],
     mouseReturn: [0, 10, 0.1],
+    tiltSensitivity: [0.2, 3, 0.05],
+    tiltRangeDeg: [8, 60, 1],
+    tiltDeadzoneDeg: [0, 10, 0.1],
   },
 };
 

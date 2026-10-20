@@ -24,6 +24,7 @@ import { Props } from './props';
 import { Sky } from './sky';
 import { SpeedFx } from './speedfx';
 import { Terrain } from './terrain';
+import { TouchControls, isTouchDevice } from './touch';
 import { TerrainMaps } from './terrainMaps';
 import { Thermals } from './thermals';
 import { createTuningPanel, onTuningChange, tuning } from './tuning';
@@ -41,6 +42,9 @@ const TERRAIN_BUDGET_MS = 3; // mesh building per frame once running
 
 const save = loadSave();
 if (save.settings.lang) setLang(save.settings.lang);
+// Phones start lighter; adaptive quality takes it from there.
+if (isTouchDevice && !save.settings.qualityLocked && save.settings.quality === 'high') save.settings.quality = 'medium';
+if (isTouchDevice) document.body.classList.add('touch');
 
 // Post-processing does the antialiasing (MSAA target), so the canvas itself doesn't need it.
 const renderer = new WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -131,6 +135,47 @@ const groundAt = (x: number, z: number) => Math.max(0, heightfield.surface(x, z)
 // ---- UI ----
 const uiRoot = document.getElementById('ui') as HTMLElement;
 const hud = new Hud(uiRoot);
+const touch = isTouchDevice ? new TouchControls(uiRoot) : null;
+input.touch = touch;
+let wakeLock: { release: () => Promise<void> } | null = null;
+
+/** Keeps the screen awake while flying by tilt (no touches for a long time). */
+function keepAwake(): void {
+  const nav = navigator as unknown as { wakeLock?: { request: (t: string) => Promise<{ release: () => Promise<void> }> } };
+  nav.wakeLock
+    ?.request('screen')
+    .then((l) => (wakeLock = l))
+    .catch(() => {});
+}
+
+/** Phones: fullscreen and portrait lock where the browser allows it (Android); harmless elsewhere. */
+function goImmersive(): void {
+  const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
+  if (!document.fullscreenElement) {
+    const p = el.requestFullscreen?.({ navigationUI: 'hide' });
+    if (p) p.then(() => (screen.orientation as unknown as { lock?: (o: string) => Promise<void> }).lock?.('portrait').catch(() => {})).catch(() => {});
+    else el.webkitRequestFullscreen?.();
+  }
+}
+
+function pauseGame(): void {
+  if (!started || menu.open) return;
+  menu.pause();
+  hud.visible = false;
+  if (touch) touch.visible = false;
+  input.releasePointer(); // menus need a free cursor
+  void wakeLock?.release().catch(() => {});
+  wakeLock = null;
+}
+
+function resumeGame(): void {
+  hud.visible = true;
+  if (touch) {
+    touch.visible = true;
+    touch.calibrate();
+    keepAwake();
+  }
+}
 const progress = new Progress(collectibles, hud, audio, save, flight);
 const menu = new Menu(
   uiRoot,
@@ -143,23 +188,32 @@ const menu = new Menu(
   }),
   {
     onPlay: () => {
+      playPressedAt = performance.now();
       audio.start();
+      if (touch) {
+        // Still inside the tap's gesture: iOS only grants motion access here.
+        touch.requestPermission();
+        goImmersive();
+        setTimeout(() => hud.showHint(touch.tiltActive ? t('hintTilt') : t('hintNoTilt')), 2500);
+      } else {
+        void renderer.domElement.requestPointerLock?.();
+      }
       if (!started) {
         started = true;
         reset();
       }
-      hud.visible = true;
-      void renderer.domElement.requestPointerLock?.();
+      resumeGame();
     },
     onSettingsChanged: applySettings,
     onResetProgress: () => {
       progress.reset();
       menu.close();
-      hud.visible = true;
+      resumeGame();
     },
   },
 );
 let started = false;
+if (touch) touch.onPause = pauseGame;
 let loadingTime = 0;
 menu.setLoading(true);
 
@@ -169,11 +223,12 @@ function applySettings(): void {
   tuning.audio.masterVolume = 0.8 * s.volume;
   tuning.audio.musicVolume = 0.6 * s.music;
   tuning.input.mouseSensitivity = s.sensitivity;
+  tuning.input.tiltSensitivity = s.tiltSensitivity;
   tuning.input.invertPitch = s.invert;
   tuning.camera.rollFactor = s.cameraRoll;
   const q: Record<Quality, { pr: number; grass: number; grassR: number; veg: number; shadows: boolean; bloom: number }> = {
-    low: { pr: 0.75, grass: 0, grassR: 60, veg: 1600, shadows: false, bloom: 0 },
-    medium: { pr: 1, grass: 0.55, grassR: 85, veg: 2400, shadows: true, bloom: 0.2 },
+    low: { pr: isTouchDevice ? 1 : 0.75, grass: 0, grassR: 60, veg: 1600, shadows: false, bloom: 0 },
+    medium: { pr: isTouchDevice ? 1.25 : 1, grass: 0.55, grassR: 85, veg: 2400, shadows: true, bloom: 0.2 },
     high: { pr: 1.5, grass: 1, grassR: 110, veg: 2800, shadows: true, bloom: 0.25 },
   };
   const p = q[s.quality];
@@ -249,7 +304,7 @@ window.addEventListener('hashchange', () => {
   if (!started) {
     started = true;
     menu.close();
-    hud.visible = true;
+    resumeGame();
   }
 });
 function resize(): void {
@@ -264,18 +319,19 @@ window.addEventListener('resize', resize);
 // released the pointer may also arrive as a key press: ignore it so it doesn't unpause at once.
 let autoPausedAt = -Infinity;
 document.addEventListener('pointerlockchange', () => {
-  if (!input.pointerLocked && started && !menu.open) {
-    menu.pause();
-    hud.visible = false;
+  if (!input.pointerLocked && started && !menu.open && !touch) {
+    pauseGame();
     autoPausedAt = performance.now();
   }
 });
+// Ignore the blur caused by the motion-permission dialog or entering fullscreen right after Play.
+let playPressedAt = -Infinity;
 window.addEventListener('blur', () => {
-  if (started && !menu.open) {
-    menu.pause();
-    hud.visible = false;
-    input.releasePointer();
-  }
+  if (performance.now() - playPressedAt > 3000) pauseGame();
+});
+// Phones: switching apps or locking the screen pauses; coming back re-takes the wake lock on resume.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseGame();
 });
 
 // Debug hook for tooling (?debug in the URL): scene and renderer on window.
@@ -286,7 +342,7 @@ reset();
 if (startOverride()) {
   started = true;
   menu.close();
-  hud.visible = true;
+  resumeGame();
 }
 
 // Adaptive quality: if flight runs below ~40 fps for a while, step down one level (once per
@@ -335,11 +391,9 @@ function frame(now: number): void {
   if (input.wasPressed('Escape') && started && performance.now() - autoPausedAt > 400) {
     if (menu.open) {
       menu.close();
-      hud.visible = true;
+      resumeGame();
     } else {
-      menu.pause();
-      hud.visible = false;
-      input.releasePointer(); // menus need a free cursor
+      pauseGame();
     }
   }
   if (playing && input.wasPressed('KeyR')) reset();
