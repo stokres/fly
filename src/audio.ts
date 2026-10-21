@@ -1,12 +1,13 @@
 // Game audio, all synthesized with the Web Audio API (no sample files).
 // This file owns the context, the mix bus (master, reverb) and the creature's own sounds: wind
-// driven by airspeed, and wing flaps timed to the downstroke. The pad lives in music.ts and the
+// driven by airspeed, and wing flaps timed to the downstroke. The piano music lives in music.ts (piano.ts synthesizes the instrument) and the
 // sounds from below in soundscape.ts.
 //
 // Browsers only allow audio after a user gesture, so nothing starts until start() is called
 // from the first key press or click.
 import { MathUtils, type PerspectiveCamera, Vector3 } from 'three';
 import { Music } from './music';
+import { Piano } from './piano';
 import { Soundscape, type SoundscapeInput } from './soundscape';
 import { tuning } from './tuning';
 
@@ -156,7 +157,7 @@ export class GameAudio {
     this.skimGain.gain.value = 0;
     this.loop(this.bus.noise.white).connect(this.skimFilter).connect(this.skimGain).connect(this.master);
 
-    this.music = new Music(this.bus);
+    this.music = new Music(this.bus, new Piano(ctx));
     this.soundscape = new Soundscape(this.bus);
 
     // Don't burn CPU (or play) in a background tab.
@@ -230,7 +231,7 @@ export class GameAudio {
   }
 
   /**
-   * Pickup sounds. Motes climb a D major pentatonic scale as a trail is collected, so a clean run
+   * Pickup sounds. Motes climb an A minor pentatonic scale (the music's key) as a trail is collected, so a clean run
    * plays a melody; a finished trail resolves with an arpeggio; feathers shimmer; shrines gong.
    */
   chime(kind: 'mote' | 'trail' | 'feather' | 'shrine', index = 0): void {
@@ -238,7 +239,7 @@ export class GameAudio {
     const ctx = this.ctx;
     const now = ctx.currentTime + 0.01;
     const hz = (midi: number) => 440 * Math.pow(2, (midi - 69) / 12);
-    const scale = [0, 2, 4, 7, 9];
+    const scale = [0, 3, 5, 7, 10];
     const note = (midi: number, at: number, len: number, gain: number, type: OscillatorType = 'sine') => {
       const o = ctx.createOscillator();
       o.type = type;
@@ -255,20 +256,20 @@ export class GameAudio {
     };
     if (kind === 'mote') {
       const n = index % 15;
-      const midi = 74 + scale[n % 5] + 12 * Math.floor(n / 5);
+      const midi = 69 + scale[n % 5] + 12 * Math.floor(n / 5);
       note(midi, now, 1.1, 0.16);
       note(midi + 12, now, 0.5, 0.05, 'triangle');
     } else if (kind === 'trail') {
-      [62, 66, 69, 74, 78, 81].forEach((m, i) => note(m, now + i * 0.07, 1.8, 0.12));
+      [69, 72, 76, 79, 81, 84].forEach((m, i) => note(m, now + i * 0.07, 1.8, 0.12));
     } else if (kind === 'feather') {
-      [62, 69, 74, 76, 78, 81, 86].forEach((m, i) => note(m, now + i * 0.04, 3.2, 0.1, i % 2 ? 'triangle' : 'sine'));
+      [57, 64, 69, 72, 76, 79, 84].forEach((m, i) => note(m, now + i * 0.04, 3.2, 0.1, i % 2 ? 'triangle' : 'sine'));
       for (let i = 0; i < 10; i++) note(93 + scale[i % 5], now + 0.3 + i * 0.06, 0.6, 0.035);
     } else {
       // Gong: a low fundamental with inharmonic partials and a slow swell.
-      [[38, 0.3, 6], [38.7, 0.12, 5], [50.3, 0.1, 4], [57.1, 0.06, 3.5], [62, 0.08, 4]].forEach(([m, g, l]) =>
+      [[33, 0.3, 6], [33.7, 0.12, 5], [45.3, 0.1, 4], [52.1, 0.06, 3.5], [57, 0.08, 4]].forEach(([m, g, l]) =>
         note(m, now, l, g, 'sine'),
       );
-      [62, 66, 69, 74].forEach((m, i) => note(m, now + 0.6 + i * 0.12, 3, 0.06, 'triangle'));
+      [57, 60, 64, 69].forEach((m, i) => note(m, now + 0.6 + i * 0.12, 3, 0.06, 'triangle'));
     }
   }
 

@@ -58,7 +58,9 @@ Original design notes: `docs/design-starting-point.md` (a starting point, not a 
 | `src/sky.ts` | sky dome: gradient, wisps, sun disc and glow, moon |
 | `src/thermals.ts` | rising air columns (climb by circling), motes, circling birds |
 | `src/audio.ts` | Web Audio bus, wind, rush, skim, flaps, pickup chimes, listener |
-| `src/music.ts` / `src/soundscape.ts` | ambient pad / surf and positioned seabird calls |
+| `src/music.ts` | generative melancholic felt piano in A minor (chords, arpeggios, sparse phrases, rubato) |
+| `src/piano.ts` + `piano.worker.ts` | synthesized felt piano: notes rendered to cached buffers in a worker |
+| `src/soundscape.ts` | surf and positioned seabird calls |
 | `src/models.ts` | glTF loading: named geometries out of `public/models/*.glb` |
 | `src/textures.ts` | shared noise texture (with an identical CPU sampler) and particle dot |
 | `src/noise.ts`, `src/random.ts`, `src/palette.ts` | seeded noise and PRNG; colors, terrain ramps, time-of-day keys |
