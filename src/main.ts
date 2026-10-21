@@ -8,6 +8,8 @@ import { ACESFilmicToneMapping, Color, PCFShadowMap, Vector3, WebGLRenderer } fr
 import { Atmosphere } from './atmosphere';
 import { type AudioInput, GameAudio } from './audio';
 import { FollowCamera } from './camera';
+import { Challenge, type ChallengeFrame } from './challenge/challenge';
+import { ChallengeSfx } from './challenge/sfx';
 import { Clouds } from './clouds';
 import { Collectibles } from './collectibles';
 import { Creature, type CreatureDrive } from './creature';
@@ -28,9 +30,10 @@ import { TouchControls, isTouchDevice } from './touch';
 import { TerrainMaps } from './terrainMaps';
 import { Thermals } from './thermals';
 import { createTuningPanel, onTuningChange, tuning } from './tuning';
+import { ChallengeHud } from './ui/challengeHud';
 import { Hud } from './ui/hud';
 import { setLang, t } from './ui/i18n';
-import { Menu } from './ui/menu';
+import { type GameMode, Menu } from './ui/menu';
 import { type Quality, loadSave, writeSave } from './ui/save';
 import { Vegetation } from './vegetation';
 import { Water } from './water';
@@ -135,6 +138,8 @@ const groundAt = (x: number, z: number) => Math.max(0, heightfield.surface(x, z)
 // ---- UI ----
 const uiRoot = document.getElementById('ui') as HTMLElement;
 const hud = new Hud(uiRoot);
+const challengeHud = new ChallengeHud(uiRoot);
+let mode: GameMode = 'zen';
 const touch = isTouchDevice ? new TouchControls(uiRoot) : null;
 input.touch = touch;
 let wakeLock: { release: () => Promise<void> } | null = null;
@@ -162,6 +167,7 @@ function pauseGame(): void {
   if (!started || menu.open) return;
   menu.pause();
   hud.visible = false;
+  challengeHud.visible = false;
   if (touch) touch.visible = false;
   input.releasePointer(); // menus need a free cursor
   void wakeLock?.release().catch(() => {});
@@ -170,6 +176,7 @@ function pauseGame(): void {
 
 function resumeGame(): void {
   hud.visible = true;
+  challengeHud.visible = mode === 'challenge' && challenge.running;
   if (touch) {
     touch.visible = true;
     touch.calibrate();
@@ -177,6 +184,30 @@ function resumeGame(): void {
   }
 }
 const progress = new Progress(collectibles, hud, audio, save, flight);
+const challenge = new Challenge(flight, challengeHud, new ChallengeSfx(() => audio.mix), groundAt, save, {
+  burst: (at, count, speed) => collectibles.burst(at, count, speed),
+  gameOver: (summary) => {
+    menu.gameOver(summary);
+    hud.visible = false;
+    challengeHud.visible = false;
+    if (touch) touch.visible = false;
+    input.releasePointer();
+  },
+});
+world.scene.add(challenge.group);
+
+/** Switches game mode. A challenge always starts fresh from the spawn point. */
+function startMode(m: GameMode): void {
+  if (m === 'challenge') {
+    reset();
+    challenge.start();
+    hud.showHint(isTouchDevice ? t('challengeIntroTouch') : t('challengeIntro'));
+  } else if (mode === 'challenge') {
+    challenge.stop();
+  }
+  mode = m;
+  menu.mode = m;
+}
 const menu = new Menu(
   uiRoot,
   save,
@@ -187,7 +218,7 @@ const menu = new Menu(
     shrineTotal: collectibles.shrineCount,
   }),
   {
-    onPlay: () => {
+    onPlay: (m) => {
       playPressedAt = performance.now();
       audio.start();
       if (touch) {
@@ -202,6 +233,7 @@ const menu = new Menu(
         started = true;
         reset();
       }
+      if (m) startMode(m);
       resumeGame();
     },
     onSettingsChanged: applySettings,
@@ -281,6 +313,17 @@ const env: FlightEnvironment = {
   currentSpeed: 0,
 };
 const idle: FlightInput = { pitch: 0, roll: 0, flap: false, boost: false };
+const stepVel = new Vector3();
+const frameInfo: ChallengeFrame = {
+  prev: new Vector3(),
+  pos: new Vector3(),
+  vel: new Vector3(),
+  forward: new Vector3(),
+  speed: 0,
+  boost: 0,
+  skim: 0,
+  camera: follow.camera,
+};
 
 /** Optional start override from the URL: `#x,y,z,headingDeg` (heading 0 = north, 90 = east). */
 function startOverride(): { x: number; y: number; z: number; yaw: number } | null {
@@ -335,13 +378,15 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // Debug hook for tooling (?debug in the URL): scene and renderer on window.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { fly: { scene: world.scene, renderer, tuning } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { fly: { scene: world.scene, renderer, tuning, challenge, flight } });
 
 applySettings();
 reset();
 if (startOverride()) {
   started = true;
   menu.close();
+  // Dev: `?challenge` with a start position jumps straight into a run.
+  if (new URLSearchParams(location.search).has('challenge')) startMode('challenge');
   resumeGame();
 }
 
@@ -390,13 +435,18 @@ function frame(now: number): void {
   input.captureEnabled = playing || !menu.open;
   if (input.wasPressed('Escape') && started && performance.now() - autoPausedAt > 400) {
     if (menu.open) {
-      menu.close();
-      resumeGame();
+      if (menu.canResume) {
+        menu.close();
+        resumeGame();
+      }
     } else {
       pauseGame();
     }
   }
-  if (playing && input.wasPressed('KeyR')) reset();
+  if (playing && input.wasPressed('KeyR')) {
+    if (mode === 'challenge') startMode('challenge');
+    else reset();
+  }
   if (input.wasPressed('KeyM')) audio.toggleMute();
   if (input.wasPressed('KeyG')) {
     guiVisible = !guiVisible;
@@ -424,11 +474,19 @@ function frame(now: number): void {
       env.current = cur.strength;
       env.currentDir.copy(cur.dir);
       env.currentSpeed = cur.speed;
+      const fallSpeed = -flight.velocity(stepVel).y;
+      const speedBefore = flight.speed;
       flight.step(FIXED_DT, intent, env);
       flight.position.addScaledVector(cur.pull, FIXED_DT);
       // Rock and buildings are solid: get pushed out, losing speed in the scrape.
       const hit = obstacles.resolve(flight.position, 1.6);
       if (hit > 0) flight.speed *= Math.max(0.9, 1 - hit * 0.05);
+      // Challenge: hitting the ground in a steep dive, or rock at speed, costs a light.
+      if (playing && challenge.running) {
+        const c = tuning.challenge;
+        const grounded = flight.position.y <= env.ground + tuning.flight.groundClearance + 1e-3;
+        if ((grounded && fallSpeed > c.crashVerticalSpeed) || (hit > 0.25 && speedBefore > c.crashObstacleSpeed)) challenge.crash();
+      }
       accumulator -= FIXED_DT;
     }
   }
@@ -441,7 +499,20 @@ function frame(now: number): void {
     progress.handle(events);
     progress.update(dt, { current: env.current, skim: flight.skim });
   }
+  if (playing) {
+    challenge.onCollect(events);
+    frameInfo.prev.copy(lastPos);
+    frameInfo.pos.copy(flight.position);
+    frameInfo.vel.copy(velocity);
+    flight.forward(frameInfo.forward);
+    frameInfo.speed = flight.speed;
+    frameInfo.boost = flight.boost;
+    frameInfo.skim = flight.skim;
+    challenge.update(dt, frameInfo);
+  }
   lastPos.copy(flight.position);
+  // Blink while invulnerable after a hit.
+  creature.object.visible = !challenge.invulnerable || Math.floor(now / 70) % 2 === 0;
 
   drive.speed = flight.speed;
   drive.pitchInput = intent.pitch;
@@ -449,9 +520,11 @@ function frame(now: number): void {
   drive.flapCount = flight.flapCount;
   creature.update(dt, pose, drive);
   follow.rush = Math.max(flight.boost, env.current);
+  follow.kick(challenge.takeKick());
   follow.update(dt, pose, velocity, flight.speed, groundAt);
   obstacles.resolve(follow.camera.position, 2.5);
   atmosphere.update(dt);
+  challenge.storm.tint(atmosphere.state);
   world.update(pose.position, atmosphere.state.lightDir);
   water.update(dt, pose.position, atmosphere.state);
   maps.update(dt, atmosphere.state.sunDir);
@@ -510,6 +583,7 @@ function frame(now: number): void {
     audioInput.coast = 4 * sea * (1 - sea);
     audioInput.birdDistance = thermals.nearestBirds(camPos, birdsAt);
     audioInput.birds = Number.isFinite(audioInput.birdDistance) ? birdsAt : null;
+    audio.setTension(challenge.tension);
     audio.update(dt, audioInput, follow.camera);
   }
   thermals.update(dt);

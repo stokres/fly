@@ -4,20 +4,37 @@ import { type Lang, getLang, setLang, t } from './i18n';
 import { isTouchDevice } from '../touch';
 import type { Quality, SaveData } from './save';
 
+export type GameMode = 'zen' | 'challenge';
+
+export interface RunSummary {
+  score: number;
+  best: number;
+  newBest: boolean;
+  time: number;
+  purified: number;
+  events: number;
+  danger: number;
+}
+
 export interface MenuCallbacks {
-  /** Player chose to fly (title or resume). */
-  onPlay: () => void;
+  /** Player chose to fly: resume (no mode), or start that mode. */
+  onPlay: (mode?: GameMode) => void;
   onSettingsChanged: () => void;
   onResetProgress: () => void;
 }
 
-type Screen = 'title' | 'pause' | 'settings' | 'controls' | 'none';
+type Screen = 'title' | 'pause' | 'settings' | 'controls' | 'gameover' | 'none';
+
+const fmt = (n: number) => Math.round(n).toLocaleString('es-ES');
 
 export class Menu {
   readonly root: HTMLElement;
   private screen: Screen = 'title';
   private previous: Screen = 'title';
   private started = false;
+  private summary: RunSummary | null = null;
+  /** Current game mode, for the pause menu. */
+  mode: GameMode = 'zen';
 
   constructor(
     parent: HTMLElement,
@@ -38,13 +55,23 @@ export class Menu {
   /** Shows the loading hint on the title until the world is ready. */
   setLoading(loading: boolean): void {
     this.root.querySelector('.loading')?.classList.toggle('hidden', !loading);
-    const play = this.root.querySelector('[data-play]') as HTMLButtonElement | null;
-    if (play) play.disabled = loading;
+    this.root.querySelectorAll<HTMLButtonElement>('[data-play]').forEach((b) => (b.disabled = loading));
   }
 
   pause(): void {
     if (!this.started || this.screen !== 'none') return;
     this.show('pause');
+  }
+
+  /** Escape can close this screen and go back to flying. */
+  get canResume(): boolean {
+    return this.screen !== 'gameover' && this.screen !== 'title';
+  }
+
+  /** End of a challenge run. */
+  gameOver(summary: RunSummary): void {
+    this.summary = summary;
+    this.show('gameover');
   }
 
   close(): void {
@@ -70,7 +97,11 @@ export class Menu {
         <div class="goal shadow">${t('goal')}</div>
         ${p.feathers || p.shrines ? progress : ''}
         ${isTouchDevice ? `<div class="goal shadow" style="opacity:0.8;font-size:13px">${t('holdHint')}</div>` : ''}
-        <button class="btn" data-play>${t('play')}</button>
+        <div class="modes">
+          <button class="btn mode" data-play="zen">${t('modeZen')}<small>${t('modeZenSub')}</small></button>
+          <button class="btn mode challenge" data-play="challenge">${t('modeChallenge')}<small>${t('modeChallengeSub')}</small></button>
+        </div>
+        ${this.save.best > 0 ? `<div class="best shadow">${t('best')}: <b>${fmt(this.save.best)}</b></div>` : ''}
         <div><button class="btn ghost" data-settings>${t('settings')}</button><button class="btn ghost" data-controls>${t('controls')}</button></div>
         <div class="loading shadow">· · ·</div>
       </div>`;
@@ -78,7 +109,29 @@ export class Menu {
       r.innerHTML = `<div class="panel center">
         <h2>${t('paused')}</h2>${progress}
         <button class="btn" data-play>${t('resume')}</button>
+        <div class="btnrow">${
+          this.mode === 'challenge'
+            ? `<button class="btn ghost" data-play="challenge">${t('restartChallenge')}</button><button class="btn ghost" data-play="zen">${t('quitChallenge')}</button>`
+            : `<button class="btn ghost" data-play="challenge">${t('tryChallenge')}</button>`
+        }</div>
         <div><button class="btn ghost" data-settings>${t('settings')}</button><button class="btn ghost" data-controls>${t('controls')}</button></div>
+      </div>`;
+    } else if (this.screen === 'gameover') {
+      const s = this.summary ?? { score: 0, best: 0, newBest: false, time: 0, purified: 0, events: 0, danger: 1 };
+      const mm = Math.floor(s.time / 60);
+      const ss = String(Math.floor(s.time % 60)).padStart(2, '0');
+      r.innerHTML = `<div class="panel center">
+        <h2>${t('gameOver')}</h2>
+        <div class="bigscore">${fmt(s.score)}</div>
+        ${s.newBest ? `<div class="newbest">${t('newBest')}</div>` : `<div class="best">${t('best')}: <b>${fmt(s.best)}</b></div>`}
+        <div class="summary">
+          <span>${t('statTime')}</span><span class="v">${mm}:${ss}</span>
+          <span>${t('statPurified')}</span><span class="v">${s.purified}</span>
+          <span>${t('statEvents')}</span><span class="v">${s.events}</span>
+          <span>${t('statDanger')}</span><span class="v">${s.danger}</span>
+        </div>
+        <button class="btn" data-play="challenge">${t('retry')}</button>
+        <div><button class="btn ghost" data-play="zen">${t('freeFlight')}</button></div>
       </div>`;
     } else if (this.screen === 'controls') {
       const keys = (isTouchDevice ? t('controlsTouch') : t('controlsList'))
@@ -112,11 +165,13 @@ export class Menu {
 
   private bind(): void {
     const r = this.root;
-    r.querySelector('[data-play]')?.addEventListener('click', () => {
-      this.started = true;
-      this.show('none');
-      this.cb.onPlay();
-    });
+    r.querySelectorAll<HTMLElement>('[data-play]').forEach((el) =>
+      el.addEventListener('click', () => {
+        this.started = true;
+        this.show('none');
+        this.cb.onPlay((el.dataset.play || undefined) as GameMode | undefined);
+      }),
+    );
     r.querySelector('[data-settings]')?.addEventListener('click', () => this.show('settings'));
     r.querySelector('[data-controls]')?.addEventListener('click', () => this.show('controls'));
     r.querySelector('[data-back]')?.addEventListener('click', () => {

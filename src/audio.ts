@@ -167,6 +167,16 @@ export class GameAudio {
     });
   }
 
+  /** The mix bus once audio has started (challenge sounds play into it). */
+  get mix(): AudioBus | null {
+    return this.ctx ? this.bus : null;
+  }
+
+  /** Music tension 0..1 (challenge mode). */
+  setTension(value: number): void {
+    this.music?.setTension(value);
+  }
+
   toggleMute(): void {
     this.muted = !this.muted;
   }

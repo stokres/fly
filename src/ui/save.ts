@@ -7,6 +7,8 @@ export interface SaveData {
   feathers: number[];
   shrines: number[];
   hintsShown: string[];
+  /** Best challenge-mode score. */
+  best: number;
   settings: {
     lang: Lang | null;
     volume: number;
@@ -28,6 +30,7 @@ export function defaultSave(): SaveData {
     feathers: [],
     shrines: [],
     hintsShown: [],
+    best: 0,
     settings: { lang: null, volume: 0.8, music: 0.6, sensitivity: 1, invert: false, quality: 'high', qualityLocked: false, cameraRoll: 0.4, tiltSensitivity: 1 },
   };
 }
@@ -42,6 +45,7 @@ export function loadSave(): SaveData {
       feathers: Array.isArray(data.feathers) ? data.feathers.filter((n) => typeof n === 'number') : [],
       shrines: Array.isArray(data.shrines) ? data.shrines.filter((n) => typeof n === 'number') : [],
       hintsShown: Array.isArray(data.hintsShown) ? data.hintsShown.filter((n) => typeof n === 'string') : [],
+      best: typeof data.best === 'number' ? data.best : 0,
       settings: { ...base.settings, ...(data.settings ?? {}) },
     };
   } catch {

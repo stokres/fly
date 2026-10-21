@@ -50,6 +50,13 @@ export class FollowCamera {
   /** 0..1 extra intensity from boosting / riding a current (wider FOV, more shake). */
   rush = 0;
   private shakeTime = 0;
+  /** Impact shake (hits, thunder), 0..1, decays on its own. */
+  private trauma = 0;
+
+  /** Adds impact shake; it fades out over about half a second. */
+  kick(amount: number): void {
+    this.trauma = Math.min(1, this.trauma + amount);
+  }
 
   update(dt: number, pose: FlightPose, velocity: Vector3, speed: number, groundAt: GroundQuery): void {
     const c = tuning.camera;
@@ -84,7 +91,8 @@ export class FollowCamera {
     this.apply(pose, velocity);
     // Speed shake: a fine tremble that grows with speed and rush, never at a cruise.
     this.shakeTime += dt;
-    const amp = c.shake * (MathUtils.smoothstep(speed, 55, 110) * 0.5 + this.rush * 0.35) * DEG;
+    this.trauma = Math.max(0, this.trauma - dt * 1.8);
+    const amp = (c.shake * (MathUtils.smoothstep(speed, 55, 110) * 0.5 + this.rush * 0.35) + this.trauma * this.trauma * 3) * DEG;
     if (amp > 0) {
       const t = this.shakeTime;
       this.camera.rotateX((Math.sin(t * 37.1) + Math.sin(t * 23.7 + 1.3)) * amp);

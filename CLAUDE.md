@@ -2,6 +2,7 @@
 
 A browser game: third-person arcade flight as a spirit bird over a Ghibli-style archipelago.
 Fast, fluid flight; exploration with soft goals (light motes, golden feathers, shrines, wind currents).
+Two modes: **Volar** (contemplative, the default) and **Reto** (challenge: lives, score, shadow enemies, random events).
 **Feel is the whole game, and it lives in the flight model and the camera.**
 Original design notes: `docs/design-starting-point.md` (a starting point, not a spec).
 
@@ -50,6 +51,11 @@ Original design notes: `docs/design-starting-point.md` (a starting point, not a 
 | `src/currents.ts` | wind currents: streak visuals and the grab/pull/carry query |
 | `src/collectibles.ts` | light motes, golden feathers, shrines: state, visuals, pickup, spark bursts |
 | `src/progress.ts` | what pickups mean: energy, chimes, HUD messages, feather upgrades, hints, saving |
+| `src/challenge/challenge.ts` | challenge mode rules and director: lives, score/combo, danger ramp, shadow spawns, random events, crashes, game over |
+| `src/challenge/shadows.ts` | shadow spirits: homing with limited turn rate, ink body shader, ember eyes, smoke; hit / purify / near miss |
+| `src/challenge/storm.ts` | storm event: darkens the atmosphere state, rain, telegraphed lightning columns and bolts |
+| `src/challenge/rings.ts`, `spirit.ts`, `starfall.ts` | ring rush, golden spirit chase, star shower events |
+| `src/challenge/sfx.ts` | challenge sounds (hits, purify, thunder, rings, stings) |
 | `src/speedfx.ts` | speed lines and skim spray/leaves |
 | `src/post.ts` | MSAA render target, bloom, tone mapping, grading, speed radial blur |
 | `src/world.ts` | scene, lights, fog, real-time shadow box around the player |
@@ -60,11 +66,12 @@ Original design notes: `docs/design-starting-point.md` (a starting point, not a 
 | `src/audio.ts` | Web Audio bus, wind, rush, skim, flaps, pickup chimes, listener |
 | `src/music.ts` | generative melancholic felt piano in A minor (chords, arpeggios, sparse phrases, rubato) |
 | `src/piano.ts` + `piano.worker.ts` | synthesized felt piano: notes rendered to cached buffers in a worker |
+| `src/percussion.ts` | taiko/ka/shaker under the music when tension rises (challenge mode) |
 | `src/soundscape.ts` | surf and positioned seabird calls |
 | `src/models.ts` | glTF loading: named geometries out of `public/models/*.glb` |
 | `src/textures.ts` | shared noise texture (with an identical CPU sampler) and particle dot |
 | `src/noise.ts`, `src/random.ts`, `src/palette.ts` | seeded noise and PRNG; colors, terrain ramps, time-of-day keys |
-| `src/ui/*` | HUD, menus, i18n (ES/EN), save data (localStorage), CSS |
+| `src/ui/*` | HUD, challenge HUD, menus (mode choice, game over), i18n (ES/EN), save data (localStorage), CSS |
 | `src/tuning.ts` + `tuning-defaults.json` | tuning panel (G), slider ranges, persistence, defaults |
 | `art/lib.py` | Blender helpers: metaballs, smoothing, decimate, tubes, flat hard-surface parts, AO bake, export |
 | `art/vegetation.py`, `clouds.py`, `architecture.py`, `creature.py` | the asset generators |
@@ -82,7 +89,8 @@ Keep files focused. A new system gets a new file, not a new section in an existi
   the Play tap (iOS requires a gesture), fullscreen + portrait lock where allowed, screen wake lock.
   Tilt mapping: side tilt banks; phone flatter than the neutral pose dives, more upright climbs.
 - Dev: `#x,y,z,headingDeg` in the URL starts there and skips the title (heading 0 = north, 90 = east).
-  `?debug` exposes `window.fly` (scene, renderer, tuning) for tooling.
+  `?debug` exposes `window.fly` (scene, renderer, tuning, challenge, flight) for tooling; `?challenge` with a start
+  position starts a challenge run (`fly.challenge.queueEvent('storm' | 'rings' | 'spirit' | 'stars' | 'swarm')`).
 - Forward is **-Z**. `yaw > 0` turns left, `pitch > 0` is nose up, `bank > 0` is right wing down.
   Object rotation order `'YXZ'`, `rotation.set(pitch, yaw, -bank)`.
 - **Every feel constant goes in `tuning-defaults.json`** with a slider range in `tuning.ts`. Player settings
@@ -123,12 +131,13 @@ Adaptive quality steps down from high → medium → low if flight stays under 4
 
 Done: stylized rendering base, Blender asset pipeline, vegetation and grass, cumulus clouds with shadows,
 villages/landmarks/boats, spirit bird, arcade flight with boost/mouse/currents/speed FX, collectibles,
-HUD, menus, save, ES/EN, adaptive quality, mobile portrait play with tilt steering.
+HUD, menus, save, ES/EN, adaptive quality, mobile portrait play with tilt steering, generative piano music,
+challenge mode (shadows, storm, ring rush, golden spirit, star shower, swarm; drums rise with tension).
 
-Ideas not done: landmark-specific challenges (timed rings through the arch), day
+Ideas not done: landmark-specific challenges (authored ring courses through the arch), online leaderboard, day
 cycle on by default with night-only secrets, more creature variety (skins unlocked by feathers), photo mode,
 moving vegetation placement to a worker, soft depth fade where clouds meet terrain.
 
 ## Out of scope
 
-Multiplayer, combat, infinite procedural world.
+Multiplayer, weapons (challenge mode's only attack is ramming shadows with boost), infinite procedural world.

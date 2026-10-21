@@ -6,8 +6,10 @@
 //  - Right hand: sparse phrases that start on a chord tone and mostly step downward, ending on a
 //    long note; many bars are left empty, because the silences carry the mood.
 //  - Rubato and humanized velocities; slower, softer and lower at night.
+//  - Tension (challenge mode): faster, steadier, a driving left hand and taiko drums underneath.
 // Everything goes through a soft "felt" low-pass and a generous reverb.
 import type { AudioBus } from './audio';
+import { Percussion } from './percussion';
 import type { Piano } from './piano';
 import { tuning } from './tuning';
 
@@ -51,6 +53,8 @@ const FIGURES: [number, number][][] = [
   [[0, 0], [2, 1], [2.5, 2], [3, 3]],
   [[0, 0], [0.75, 2], [1.5, 4], [2.25, 3], [3, 2]],
 ];
+/** Driving eighths for tense moments. */
+const DRIVE: [number, number][] = [[0, 0], [0.5, 2], [1, 1], [1.5, 2], [2, 0], [2.5, 2], [3, 1], [3.5, 3]];
 
 /** Melody rhythms, in beats (note lengths), filling up to two bars. */
 const RHYTHMS = [
@@ -76,6 +80,9 @@ export class Music {
   private phraseCarry: { beat: number; midi: number; len: number; vel: number }[] = [];
   private lastMelody = 76; // E5
   private night = 0;
+  private tension = 0;
+  private tensionTarget = 0;
+  private readonly drums: Percussion;
 
   constructor(
     private readonly bus: AudioBus,
@@ -94,6 +101,8 @@ export class Music {
     const send = ctx.createGain();
     send.gain.value = 0.75;
     this.out.connect(send).connect(bus.reverb);
+    // Drums skip the felt filter (it would dull the shaker) but share the music volume.
+    this.drums = new Percussion(bus, this.out);
 
     // Render every pitch the piece can use ahead of time.
     const pitches = new Set<number>();
@@ -107,9 +116,15 @@ export class Music {
     this.nextBar = ctx.currentTime + 2.5; // let the pitches warm up first
   }
 
-  update(_dt: number, night: number): void {
+  /** 0 calm .. 1 everything at stake. Eased over a few seconds. */
+  setTension(value: number): void {
+    this.tensionTarget = Math.max(0, Math.min(1, value));
+  }
+
+  update(dt: number, night: number): void {
     const now = this.bus.ctx.currentTime;
     this.night += (night - this.night) * 0.01;
+    this.tension += (this.tensionTarget - this.tension) * (1 - Math.exp(-0.5 * dt));
     this.out.gain.setTargetAtTime(tuning.audio.musicVolume * 0.7, now, 2);
     this.felt.frequency.setTargetAtTime(3400 - this.night * 1500, now, 2);
     // Schedule a bar a little before it starts.
@@ -120,8 +135,8 @@ export class Music {
   }
 
   private get beat(): number {
-    // ~62 bpm by day, slower at night.
-    return 60 / (62 - this.night * 8);
+    // ~62 bpm by day, slower at night, up to ~94 when tense.
+    return 60 / (62 - this.night * 8 * (1 - this.tension) + this.tension * 32);
   }
 
   private scheduleBar(t0: number): void {
@@ -131,14 +146,16 @@ export class Music {
       this.progression = rand() < 0.35 ? this.progression : pick(PROGRESSIONS);
     }
     const chord = this.progression[this.bar % 4];
-    const soft = 1 - this.night * 0.35;
+    const tense = this.tension;
+    const soft = (1 - this.night * 0.35) * (1 + tense * 0.35);
     const dest = this.felt;
+    this.drums.scheduleBar(t0, beat, tense, this.bar);
 
     // Left hand.
     const notes = [chord.root, ...chord.tones];
-    const figure = pick(FIGURES);
+    const figure = tense > 0.55 ? DRIVE : pick(FIGURES);
     for (const [b, i] of figure) {
-      const jitter = (rand() - 0.5) * 0.04;
+      const jitter = (rand() - 0.5) * 0.04 * (1 - tense);
       const vel = (b === 0 ? 0.42 : 0.26 + rand() * 0.1) * soft;
       this.piano.play(notes[Math.min(i, notes.length - 1)], t0 + b * beat + jitter, vel, dest);
     }
@@ -148,7 +165,7 @@ export class Music {
     // Right hand: continue a phrase, or start one (or rest).
     let melody = this.phraseCarry;
     this.phraseCarry = [];
-    if (melody.length === 0 && this.bar % 2 === 0 && rand() < 0.62 - this.night * 0.25) {
+    if (melody.length === 0 && this.bar % 2 === 0 && rand() < 0.62 - this.night * 0.25 + tense * 0.3) {
       melody = this.composePhrase(chord, rand() < 0.5 ? 0 : 1);
     }
     for (const n of melody) {
@@ -156,12 +173,12 @@ export class Music {
         this.phraseCarry.push({ ...n, beat: n.beat - 4 });
         continue;
       }
-      const jitter = (rand() - 0.3) * 0.06; // melody lags a hair behind the bass, like a pianist
+      const jitter = (rand() - 0.3) * 0.06 * (1 - tense * 0.7); // melody lags a hair behind the bass, like a pianist
       this.piano.play(n.midi, t0 + n.beat * beat + jitter, n.vel * soft, dest);
     }
 
     this.bar++;
-    this.nextBar = t0 + 4 * beat * (1 + (rand() - 0.5) * 0.04); // a breath of rubato per bar
+    this.nextBar = t0 + 4 * beat * (1 + (rand() - 0.5) * 0.04 * (1 - tense)); // a breath of rubato per bar, none when tense
   }
 
   /** A two-bar phrase: starts on a chord tone, moves mostly by step and mostly down. */
